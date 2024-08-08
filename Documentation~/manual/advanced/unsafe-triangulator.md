@@ -1,6 +1,6 @@
 # Unsafe Triangulator
 
-> [!CAUTION]  
+> [!CAUTION]
 > Use the unsafe context with caution! Ensure you understand what you are doing. It is recommended to first learn the usage of the managed [`Triangulator`][triangulator]. Using the unsafe triangulator can lead to unexpected behavior if not used correctly.
 
 The package also provides a low-level API through [`UnsafeTriangulator<T2>`][unsafe-triangulator].
@@ -32,7 +32,7 @@ this corresponds to the following managed approach with [`Triangulator<T2>`][tri
 ```csharp
 using var triangulator = new Triangulator(Allocator.Persistent)
 {
-    Input = { Positions = new float2[]{ ... }.AsNativeArray() }
+    Input = { Positions = new NativeArray(...) }
 };
 triangulator.Run();
 var triangles = triangulator.Output.Triangles;
@@ -118,7 +118,7 @@ t.Triangulate(input, output, args), Allocator.Persistent);
 t.PlantHoleSeeds(input, output, args.With(autoHolesAndBoundary: true), Allocator.Persistent);
 ```
 
-> [!NOTE]  
+> [!NOTE]
 > Depending on the options, some of the buffers may not be required for [`PlantHoleSeeds`][plant-seeds]. For example, when the user provides `HoleSeeds` in [`InputData<T2>`][n-output-data], `Positions` in [`OutputData<T2>`][n-output-data] must be provided. However, in other cases, it may not be required.
 
 ### `RefineMesh`
