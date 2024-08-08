@@ -520,6 +520,14 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
     {
         private static readonly TUtils utils = default;
 
+        static readonly ProfilerMarker MarkerPreProcessInputStep = new($"{nameof(PreProcessInputStep)}");
+        static readonly ProfilerMarker MarkerPostProcessInputStep = new($"{nameof(PostProcessInputStep)}");
+        static readonly ProfilerMarker MarkerValidateInputStep = new($"{nameof(ValidateInputStep)}");
+        static readonly ProfilerMarker MarkerDelaunayTriangulationStep = new($"{nameof(DelaunayTriangulationStep)}");
+        static readonly ProfilerMarker MarkerConstrainEdgesStep = new($"{nameof(ConstrainEdgesStep)}");
+        static readonly ProfilerMarker MarkerPlantingSeedStep = new($"{nameof(PlantingSeedStep)}");
+        static readonly ProfilerMarker MarkerRefineMeshStep = new($"{nameof(RefineMeshStep)}");
+
         public void Triangulate(InputData<T2> input, OutputData<T2> output, Args args, Allocator allocator)
         {
             var tmpStatus = default(NativeReference<Status>);
@@ -568,7 +576,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
         private void PreProcessInputStep(InputData<T2> input, OutputData<T2> output, Args args, out NativeArray<T2> localHoles, out TTransform lt, Allocator allocator)
         {
-            using var _ = new ProfilerMarker($"{nameof(PreProcessInputStep)}").Auto();
+            using var _ = MarkerPreProcessInputStep.Auto();
 
             var localPositions = output.Positions;
             localPositions.ResizeUninitialized(input.Positions.Length);
@@ -600,7 +608,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
         private void PostProcessInputStep(OutputData<T2> output, Args args, TTransform lt)
         {
-            using var _ = new ProfilerMarker($"{nameof(PostProcessInputStep)}").Auto();
+            using var _ = MarkerPostProcessInputStep.Auto();
             if (args.Preprocessor != Preprocessor.None)
             {
                 var inverse = lt.Inverse();
@@ -628,7 +636,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public void Execute()
             {
-                using var _ = new ProfilerMarker($"{nameof(ValidateInputStep)}").Auto();
+                using var _ = MarkerValidateInputStep.Auto();
 
                 if (!args.ValidateInput)
                 {
@@ -807,7 +815,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public void Execute(Allocator allocator)
             {
-                using var _ = new ProfilerMarker($"{nameof(DelaunayTriangulationStep)}").Auto();
+                using var _ = MarkerDelaunayTriangulationStep.Auto();
 
                 if (status.Value.IsError)
                 {
@@ -1191,7 +1199,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public void Execute(Allocator allocator)
             {
-                using var _ = new ProfilerMarker($"{nameof(ConstrainEdgesStep)}").Auto();
+                using var _ = MarkerConstrainEdgesStep.Auto();
 
                 if (!inputConstraintEdges.IsCreated || status.Value.IsError)
                 {
@@ -1607,7 +1615,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public void Execute(Allocator allocator, bool constraintsIsCreated)
             {
-                using var _ = new ProfilerMarker($"{nameof(PlantingSeedStep)}").Auto();
+                using var _ = MarkerPlantingSeedStep.Auto();
 
                 if (!constraintsIsCreated || status.IsCreated && status.Value.IsError)
                 {
@@ -1919,7 +1927,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public void Execute(Allocator allocator, bool refineMesh, bool constrainBoundary)
             {
-                using var _ = new ProfilerMarker($"{nameof(RefineMeshStep)}").Auto();
+                using var _ = MarkerRefineMeshStep.Auto();
 
                 if (!refineMesh || status.IsCreated && status.Value.IsError)
                 {
