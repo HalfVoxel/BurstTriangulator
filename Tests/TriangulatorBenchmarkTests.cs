@@ -5,12 +5,56 @@ using System.Linq;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Burst;
 
 namespace andywiecko.BurstTriangulator.Editor.Tests
 {
+    [BurstCompile]
+    static class BurstCompileAssert {
+        [BurstCompile]
+        public static void AssertIsBurst () {
+            ThrowIfNotBurst();
+        }
+
+        [BurstDiscard]
+        static void ThrowIfNotBurst () {
+            throw new System.Exception("Burst is not enabled");
+        }
+    }
+
     [Explicit, Category("Benchmark")]
     public class TriangulatorBenchmarkTests
     {
+        bool debuggerInitialValue;
+
+        [OneTimeSetUp]
+        public void Setup () {
+            UnityEngine.Debug.Log("Setting up Burst...");
+            // Disable compiler while setting options, to avoid triggering recompilations for every change
+            BurstCompiler.Options.EnableBurstCompilation = false;
+            BurstCompiler.Options.EnableBurstCompileSynchronously = true;
+            BurstCompiler.Options.EnableBurstDebug = false;
+            BurstCompiler.Options.ForceEnableBurstSafetyChecks = false;
+            BurstCompiler.Options.EnableBurstSafetyChecks = false;
+
+            // Re-enable compiler. This will force a recompilation
+            BurstCompiler.Options.EnableBurstCompilation = true;
+
+            if (!BurstCompiler.Options.IsEnabled) {
+                throw new System.Exception("Burst must be enabled for these tests");
+            }
+
+            debuggerInitialValue = Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobDebuggerEnabled;
+            Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobDebuggerEnabled = false;
+
+            BurstCompileAssert.AssertIsBurst();
+        }
+
+        [OneTimeTearDown]
+        public void TearDown () {
+            Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobDebuggerEnabled = debuggerInitialValue;
+        }
+
         static TestCaseData DelaunayCase(int count, int N) => new((count: count, N: N))
         {
             TestName = $"Points: {count * count}"
