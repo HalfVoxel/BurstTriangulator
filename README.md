@@ -2,24 +2,26 @@
 <p align="center"><img src="Documentation~/images/burst-triangulator-logo-light-mode.svg#gh-light-mode-only"/></p>
 <p align="center"><img src="Documentation~/images/burst-triangulator-logo-dark-mode.svg#gh-dark-mode-only"/></p>
 
-[![Build](https://github.com/andywiecko/BurstTriangulator/actions/workflows/build.yml/badge.svg)](https://github.com/andywiecko/BurstTriangulator/actions/workflows/build.yml)
-[![Tests](https://github.com/andywiecko/BurstTriangulator/actions/workflows/test.yml/badge.svg)](https://github.com/andywiecko/BurstTriangulator/actions/workflows/test.yml)
+[![Build](https://github.com/halfvoxel/BurstTriangulator/actions/workflows/build.yml/badge.svg)](https://github.com/halfvoxel/BurstTriangulator/actions/workflows/build.yml)
+[![Tests](https://github.com/halfvoxel/BurstTriangulator/actions/workflows/test.yml/badge.svg)](https://github.com/halfvoxel/BurstTriangulator/actions/workflows/test.yml)
 [![openupm](https://img.shields.io/npm/v/com.andywiecko.burst.triangulator?label=openupm&registry_uri=https://package.openupm.com)](https://openupm.com/packages/com.andywiecko.burst.triangulator/)
+
+<b>This is a fork of [andywiecko/BurstTriangulator](https://github.com/andywiecko/BurstTriangulator) with more code comments. Since the author of the original library is very much against them.</b>
 
 A single-file package which provides Delaunay triangulation of the given set of points with constraints and mesh refinement.
 
 ## ✨ Supported Features
 
-- **Delaunay triangulation** [ᵈᵒᶜˢ↗](https://andywiecko.github.io/BurstTriangulator/manual/examples/triangulation.html)
-- **Constrained triangulation** [ᵈᵒᶜˢ↗](https://andywiecko.github.io/BurstTriangulator/manual/examples/constrained-triangulation.html)
-- **Mesh refinement** (angle and area parameters) [ᵈᵒᶜˢ↗](https://andywiecko.github.io/BurstTriangulator/manual/examples/mesh-refinement.html)
-- **Holes and restoring boundary** (manual and auto) [ᵈᵒᶜˢ↗](https://andywiecko.github.io/BurstTriangulator/manual/examples/holes-and-boundaries.html)
-- **Support for `Unity.Jobs` pipeline** [ᵈᵒᶜˢ↗](https://andywiecko.github.io/BurstTriangulator/manual/advanced/input-jobs.html)
-- **Input preprocessors** [ᵈᵒᶜˢ↗](https://andywiecko.github.io/BurstTriangulator/manual/advanced/preprocessor.html)
-- **Input validation** [ᵈᵒᶜˢ↗](https://andywiecko.github.io/BurstTriangulator/manual/advanced/input-validation.html)
-- **Generic coordinates** (`float2`, `double2`) [ᵈᵒᶜˢ↗](https://andywiecko.github.io/BurstTriangulator/manual/advanced/generic-coordinates.html)
-- **Native support** (low level API) [ᵈᵒᶜˢ↗](https://andywiecko.github.io/BurstTriangulator/manual/advanced/unsafe-triangulator.html)
-- **Managed input support** [ᵈᵒᶜˢ↗](https://andywiecko.github.io/BurstTriangulator/manual/advanced/input-managed.html)
+- **Delaunay triangulation** [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/examples/triangulation.html)
+- **Constrained triangulation** [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/examples/constrained-triangulation.html)
+- **Mesh refinement** (angle and area parameters) [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/examples/mesh-refinement.html)
+- **Holes and restoring boundary** (manual and auto) [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/examples/holes-and-boundaries.html)
+- **Support for `Unity.Jobs` pipeline** [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/advanced/input-jobs.html)
+- **Input preprocessors** [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/advanced/preprocessor.html)
+- **Input validation** [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/advanced/input-validation.html)
+- **Generic coordinates** (`float2`, `double2`) [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/advanced/generic-coordinates.html)
+- **Native support** (low level API) [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/advanced/unsafe-triangulator.html)
+- **Managed input support** [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/advanced/input-managed.html)
 
 To view the documentation for the manual and scripting API access it online [**here**][manual] or navigate to `Documentation~/` and build this using `docfx.json`.
 
@@ -56,8 +58,8 @@ and to triangulate unit box $[(0, 0), (1, 0), (1, 1), (0, 1)]$:
 
 ```csharp
 using var positions = new NativeArray<double2>(new[]
-{ 
-    new(0, 0), new(1, 0), new(1, 1), new(0, 1) 
+{
+    new(0, 0), new(1, 0), new(1, 1), new(0, 1)
 }, Allocator.Persistent);
 using var triangulator = new Triangulator(Allocator.Persistent)
 {
@@ -79,9 +81,9 @@ var triangles = triangulator.Output.Triangles;
 Found a bug? Please open an issue. You can find a list of known issues [**here**][issues]. Interested in contributing to the project? Feel free to open an issue or submit a pull request. For updates on current and future work related to this package, check out the package [project].
 
 [manual]: https://andywiecko.github.io/BurstTriangulator
-[issues]: https://andywiecko.github.io/BurstTriangulator/manual/known-issues.html
-[benchmark]: https://andywiecko.github.io/BurstTriangulator/manual/benchmark.html
-[project]: https://github.com/andywiecko/BurstTriangulator/projects
+[issues]: https://github.com/halfvoxel/BurstTriangulator/manual/known-issues.html
+[benchmark]: https://github.com/halfvoxel/BurstTriangulator/manual/benchmark.html
+[project]: https://github.com/halfvoxel/BurstTriangulator/projects
 [burst]: https://docs.unity3d.com/Packages/com.unity.burst@1.8/
 [delaunator-sharp]: https://github.com/nol1fe/delaunator-sharp/
 [cgaldotnet]: https://github.com/Scrawk/CGALDotNet
