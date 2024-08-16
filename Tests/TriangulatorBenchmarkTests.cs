@@ -7,6 +7,7 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using Benchy;
 using Unity.Burst;
+using andywiecko.BurstTriangulator.LowLevel.Unsafe;
 
 namespace andywiecko.BurstTriangulator.Editor.Tests
 {
@@ -20,6 +21,21 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
         [BurstDiscard]
         static void ThrowIfNotBurst () {
             throw new System.Exception("Burst is not enabled");
+        }
+    }
+
+    [BurstCompile]
+    struct UnsafeTriangulateJob: IJob {
+        public UnsafeTriangulator<float2> unsafeTriangulator;
+        public LowLevel.Unsafe.InputData<float2> input;
+        public LowLevel.Unsafe.OutputData<float2> output;
+        public Args args;
+        public int repetitions;
+
+        public void Execute() {
+            for (int i = 0; i < repetitions; i++) {
+                LowLevel.Unsafe.Extensions.Triangulate(new UnsafeTriangulator<float2>(), input, output, args, Allocator.Temp);
+            }
         }
     }
 
@@ -118,6 +134,64 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             });
         }
 
+        static TestCaseData RepeatedDelaunayCase(int count, int repetitions, string suffix) => new((count: count, repetitions: repetitions))
+        {
+            TestName = $"Points: {count * count}{suffix}"
+        };
+        private static readonly TestCaseData[] delaunayBenchmarkFloat2UnsafeTestData =
+        {
+            RepeatedDelaunayCase(count: 3, repetitions: 100, " (unsafe)"),
+            RepeatedDelaunayCase(count: 10, repetitions: 100, " (unsafe)"),
+            RepeatedDelaunayCase(count: 20, repetitions: 100, " (unsafe)"),
+            RepeatedDelaunayCase(count: 31, repetitions: 100, " (unsafe)"),
+            RepeatedDelaunayCase(count: 50, repetitions: 10, " (unsafe)"),
+            RepeatedDelaunayCase(count: 100, repetitions: 10, " (unsafe)"),
+            RepeatedDelaunayCase(count: 200, repetitions: 10, " (unsafe)"),
+            RepeatedDelaunayCase(count: 300, repetitions: 10, " (unsafe)"),
+            RepeatedDelaunayCase(count: 400, repetitions: 10, " (unsafe)"),
+            RepeatedDelaunayCase(count: 500, repetitions: 10, " (unsafe)"),
+        };
+
+        [Test, TestCaseSource(nameof(delaunayBenchmarkFloat2UnsafeTestData))]
+        public void DelaunayBenchmarkFloat2UnsafeTest((int count, int repetitions) input)
+        {
+            var (count, repetitions) = input;
+
+            var points = new List<float2>(count * count);
+            for (int i = 0; i < count; i++)
+            {
+                for (int j = 0; j < count; j++)
+                {
+                    var p = math.float2(i / (float)(count - 1), j / (float)(count - 1));
+                    points.Add(p);
+                }
+            }
+
+            using var positions = new NativeArray<float2>(points.ToArray(), Allocator.Persistent);
+
+            var triangulator = new UnsafeTriangulator<float2>();
+            var inputData = new LowLevel.Unsafe.InputData<float2> {
+                Positions = positions
+            };
+            var output = new LowLevel.Unsafe.OutputData<float2> {
+                Triangles = new NativeList<int>(0, Allocator.TempJob)
+            };
+            var args = Args.Default().With(
+            refineMesh:  false,
+            restoreBoundary:  false,
+            validateInput:  false);
+
+            result.RecordSeries("Delaunay F32 (unsafe)", "Only delaunay triangulation. Repeats multiple times in a single job.", new Aspect[] { new Aspect("Edges", count), new Aspect("Reps", repetitions) }, () => {
+                new UnsafeTriangulateJob {
+                    unsafeTriangulator = triangulator,
+                    input = inputData,
+                    output = output,
+                    args = args,
+                    repetitions = repetitions,
+                }.Run();
+            });
+
+            output.Triangles.Dispose();
         }
 
         private static readonly TestCaseData[] delaunayBenchmarkDouble2TestData = delaunayBenchmarkTestData
