@@ -731,7 +731,6 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private readonly bool verbose;
             private int hullStart;
             private int trianglesLen;
-            private T2 c;
 
 
 
@@ -744,7 +743,6 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 halfedges = output.Halfedges;
                 constrainedHalfedges = output.ConstrainedHalfedges;
                 hullStart = int.MaxValue;
-                c = utils.MaxValue2();
                 verbose = args.Verbose;
                 hashSize = (int)math.ceil(math.sqrt(positions.Length));
                 trianglesLen = default;
@@ -857,7 +855,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 }
 
                 // Sort all other vertices by their distance to the circumcenter of the initial triangle
-                c = utils.CircumCenter(p0, p1, p2);
+                var c = utils.CircumCenter(p0, p1, p2);
                 for (int i = 0; i < positions.Length; i++)
                 {
                     dists[i] = utils.distancesq(c, positions[i]);
