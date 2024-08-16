@@ -841,7 +841,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 {
                     if (verbose)
                     {
-                        Debug.LogError("[Triangulator]: Provided input is not supported!");
+                        Debug.LogError("[Triangulator]: Duplicate points, or only colinear points, are not supported.");
                     }
                     status.Value |= Status.ERR;
                     return;
