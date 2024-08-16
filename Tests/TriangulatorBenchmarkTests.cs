@@ -64,33 +64,32 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             UnityEngine.Debug.Log(result.GenerateSummary());
         }
 
-        static TestCaseData DelaunayCase(int count, int N) => new((count: count, N: N))
+        static TestCaseData DelaunayCase(int count) => new(count)
         {
             TestName = $"Points: {count * count}"
         };
         private static readonly TestCaseData[] delaunayBenchmarkTestData =
         {
-            DelaunayCase(count: 10, N: 1000),
-            DelaunayCase(count: 20, N: 1000),
-            DelaunayCase(count: 31, N: 1000),
-            DelaunayCase(count: 50, N: 100),
-            DelaunayCase(count: 100, N: 100),
-            DelaunayCase(count: 200, N: 100),
-            DelaunayCase(count: 300, N: 100),
-            DelaunayCase(count: 400, N: 100),
-            DelaunayCase(count: 500, N: 100),
-            DelaunayCase(count: 600, N: 10),
-            DelaunayCase(count: 700, N: 10),
-            DelaunayCase(count: 800, N: 10),
-            DelaunayCase(count: 900, N: 10),
-            DelaunayCase(count: 1000, N: 10),
+            DelaunayCase(count: 3),
+            DelaunayCase(count: 10),
+            DelaunayCase(count: 20),
+            DelaunayCase(count: 31),
+            DelaunayCase(count: 50),
+            DelaunayCase(count: 100),
+            DelaunayCase(count: 200),
+            DelaunayCase(count: 300),
+            DelaunayCase(count: 400),
+            DelaunayCase(count: 500),
+            DelaunayCase(count: 600),
+            DelaunayCase(count: 700),
+            DelaunayCase(count: 800),
+            DelaunayCase(count: 900),
+            DelaunayCase(count: 1000),
         };
 
         [Test, TestCaseSource(nameof(delaunayBenchmarkTestData))]
-        public void DelaunayBenchmarkFloat2Test((int count, int N) input)
+        public void DelaunayBenchmarkFloat2Test(int count)
         {
-            var (count, N) = input;
-
             var points = new List<float2>(count * count);
             for (int i = 0; i < count; i++)
             {
@@ -126,9 +125,8 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             .ToArray();
 
         [Test, TestCaseSource(nameof(delaunayBenchmarkDouble2TestData))]
-        public void DelaunayBenchmarkDouble2Test((int count, int N) input)
+        public void DelaunayBenchmarkDouble2Test(int count)
         {
-            var (count, N) = input;
             var debuggerInitialValue = Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobDebuggerEnabled;
             Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobDebuggerEnabled = false;
 
@@ -166,10 +164,8 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             .ToArray();
 
         [Test, TestCaseSource(nameof(delaunayBenchmarkInt2TestData))]
-        public void DelaunayBenchmarkInt2Test((int count, int N) input)
+        public void DelaunayBenchmarkInt2Test(int count)
         {
-            var (count, N) = input;
-
             var points = new List<int2>(count * count);
             for (int i = 0; i < count; i++)
             {
