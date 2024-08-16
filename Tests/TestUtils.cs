@@ -26,17 +26,15 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             using var _x = new NativeArray<int>(x.ToArray(), Allocator.Persistent);
             using var _y = new NativeArray<int>(y.ToArray(), Allocator.Persistent);
 
-            if (_x.Length != _y.Length) return false;
-
             static NativeArray<int> sort(NativeArray<int> t)
             {
-                for (int i = 0; i < t.Length / 3; i++)
+                for (int i = 0; i < t.Length; i += 3)
                 {
-                    var (t0, t1, t2) = (t[3 * i + 0], t[3 * i + 1], t[3 * i + 2]);
+                    var (t0, t1, t2) = (t[i + 0], t[i + 1], t[i + 2]);
                     var (id, min) = (0, t0);
                     (id, min) = t1 < min ? (1, t1) : (id, min);
                     (id, min) = t2 < min ? (2, t2) : (id, min);
-                    (t[3 * i + 0], t[3 * i + 1], t[3 * i + 2]) = (t[3 * i + id], t[3 * i + (id + 1) % 3], t[3 * i + (id + 2) % 3]);
+                    (t[i + 0], t[i + 1], t[i + 2]) = (t[i + id], t[i + (id + 1) % 3], t[i + (id + 2) % 3]);
                 }
 
                 t.Reinterpret<int3>(4).Sort(default(Int3Comparer));
