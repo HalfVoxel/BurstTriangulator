@@ -111,16 +111,6 @@ namespace andywiecko.BurstTriangulator
         public NativeArray<T2> HoleSeeds { get; set; }
     }
 
-    /// <summary>
-    /// Allocation free input class with implicit cast to <see cref="InputData{T2}"/>.
-    /// </summary>
-    public class ManagedInput<T2> where T2 : unmanaged
-    {
-        public T2[] Positions { get; set; }
-        public int[] ConstraintEdges { get; set; }
-        public T2[] HoleSeeds { get; set; }
-    }
-
     public class OutputData<T2> where T2 : unmanaged
     {
         public NativeList<T2> Positions => owner.outputPositions;
