@@ -13,6 +13,7 @@ For online version see [Github Releases].
 - Removed `AsNativeArray` since it could cause memory corruption if a garbage collection happened to run while the native array was used.
 - Removed managed input support since it was inherently impossible to use safely and could caue memory corruption (it used `AsNativeArray` under the hood).
 - Improved error reporting, so you can now access information about the error via code, instead of just "there was an error".
+- `Args` is now blittable, making it possible to pass it via `ref` to burstified static functions.
 
 ## [3.1.0] – 2024-08-01
 
