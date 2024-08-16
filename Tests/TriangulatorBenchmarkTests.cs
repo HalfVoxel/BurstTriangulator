@@ -302,6 +302,32 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             });
         }
 
+        [Test, TestCaseSource(nameof(refineMeshBenchmarkTestData))]
+        public void RefineMeshBenchmarkTestF64((float area, int N) input)
+        {
+            var (area, N) = input;
+
+            using var points = new NativeArray<double2>(new[]
+            {
+                math.double2(-1, -1),
+                math.double2(+1, -1),
+                math.double2(+1, +1),
+                math.double2(-1, +1),
+            }, Allocator.Persistent);
+            using var triangulator = new Triangulator<double2>(capacity: 64 * 1024, Allocator.Persistent)
+            {
+                Input = { Positions = points },
+                Settings = {
+                    RefineMesh = true,
+                    RestoreBoundary = false,
+                    ValidateInput = false,
+                    RefinementThresholds = { Area = area },
+                },
+            };
+
+            result.RecordSeries("RefineMesh F64", "Triangulate and refine mesh", new Aspect[] { new Aspect("Area", area) }, () => {
+                triangulator.Schedule().Complete();
+            });
         }
     }
 }
