@@ -253,6 +253,43 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             inputData.ConstraintEdges.Dispose();
         }
 
+        static NativeArray<int2> ToFixedPrecision(NativeArray<float2> points, float scale, Allocator allocator)
+        {
+            var result = new NativeArray<int2>(points.Length, allocator);
+            for (int i = 0; i < points.Length; i++)
+            {
+                result[i] = (int2)(math.round(points[i] * scale));
+            }
+            return result;
+        }
+
+        [Test, TestCaseSource(nameof(constraintBenchmarkTestData))]
+        public void ConstrainedTriangulationBenchmarkInt2Test((int count, int N) input)
+        {
+            var (count, N) = input;
+            var inputDataFloat = ConstraintInput(count, N);
+
+            using var positions = ToFixedPrecision(inputDataFloat.Positions, 10000, Allocator.Persistent);
+
+            var triangulator = new Triangulator<int2>(0, Allocator.Temp) {
+                Input = new InputData<int2> {
+                    Positions = positions,
+                    ConstraintEdges = inputDataFloat.ConstraintEdges
+                },
+                Settings = {
+                    RefineMesh = false,
+                    RestoreBoundary = false,
+                    ValidateInput = true
+                }
+            };
+
+            result.RecordSeries("Constrained I32", "Triangulation", new Aspect[] { new Aspect("ConstrainedEdges", N) }, () => {
+                triangulator.Run();
+            });
+
+            inputDataFloat.Positions.Dispose();
+            inputDataFloat.ConstraintEdges.Dispose();
+            triangulator.Dispose();
         }
 
         private static readonly TestCaseData[] refineMeshBenchmarkTestData =
