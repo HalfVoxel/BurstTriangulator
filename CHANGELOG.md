@@ -12,6 +12,7 @@ For online version see [Github Releases].
 - Removed the concentric shells parameter from the settings. It is now a hardcoded constant that should work well for all triangulations.
 - Removed `AsNativeArray` since it could cause memory corruption if a garbage collection happened to run while the native array was used.
 - Removed managed input support since it was inherently impossible to use safely and could caue memory corruption (it used `AsNativeArray` under the hood).
+- Improved error reporting, so you can now access information about the error via code, instead of just "there was an error".
 
 ## [3.1.0] – 2024-08-01
 

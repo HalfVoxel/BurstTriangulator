@@ -27,7 +27,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             triangulator.Run();
 
-            LogAssert.Expect(UnityEngine.LogType.Error, new Regex("Mesh refinement is not supported for this coordinate type.*"));
+            Assert.AreEqual(triangulator.Output.Status.Value, Status.IntegersDoNotSupportMeshRefinement);
         }
     }
 
@@ -71,7 +71,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(0, 0),
                     math.float2(0, 1)
                 }
-            ) { TestName = "Test Case 1 (points count less than 3)" },
+            ) { TestName = "Test Case 1 (points count less than 3)", ExpectedResult = Status.PositionsLengthLessThan3(2) },
             new TestCaseData(
                 new[]
                 {
@@ -80,7 +80,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1)
                 }
-            ) { TestName = "Test Case 2 (duplicated position)" },
+            ) { TestName = "Test Case 2 (duplicated position)", ExpectedResult = Status.DuplicatePosition(0) },
             new TestCaseData(
                 new[]
                 {
@@ -89,7 +89,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1)
                 }
-            ) { TestName = "Test Case 3 (point with NaN)" },
+            ) { TestName = "Test Case 3 (point with NaN)", ExpectedResult = Status.PositionsMustBeFinite(1) },
             new TestCaseData(
                 new[]
                 {
@@ -98,7 +98,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1)
                 }
-            ) { TestName = "Test Case 4 (point with +inf)" },
+            ) { TestName = "Test Case 4 (point with +inf)", ExpectedResult = Status.PositionsMustBeFinite(1) },
             new TestCaseData(
                 new[]
                 {
@@ -107,11 +107,11 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1)
                 }
-            ) { TestName = "Test Case 4 (point with -inf)" },
+            ) { TestName = "Test Case 4 (point with -inf)", ExpectedResult = Status.PositionsMustBeFinite(1) },
         };
 
         [Test, TestCaseSource(nameof(validateInputPositionsTestData))]
-        public void ValidateInputPositionsTest(float2[] managedPositions)
+        public Status ValidateInputPositionsTest(float2[] managedPositions)
         {
             if (typeof(T) == typeof(int2) && managedPositions.Any(p => !math.all(math.isfinite(p))))
             {
@@ -128,14 +128,14 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             LogAssert.Expect(UnityEngine.LogType.Error, new Regex(".*"));
             triangulator.Run();
 
-            Assert.That(triangulator.Output.Status.Value, Is.EqualTo(Status.ERR));
+            return triangulator.Output.Status.Value;
         }
 
         private static readonly TestCaseData[] validateInputPositionsNoVerboseTestData = validateInputPositionsTestData
-            .Select(i => new TestCaseData(i.Arguments) { TestName = i.TestName[..^1] + ", no verbose" }).ToArray();
+            .Select(i => new TestCaseData(i.Arguments) { TestName = i.TestName[..^1] + ", no verbose", ExpectedResult = i.ExpectedResult }).ToArray();
 
         [Test, TestCaseSource(nameof(validateInputPositionsNoVerboseTestData))]
-        public void ValidateInputPositionsNoVerboseTest(float2[] managedPositions)
+        public Status ValidateInputPositionsNoVerboseTest(float2[] managedPositions)
         {
             if (typeof(T) == typeof(int2) && managedPositions.Any(p => !math.all(math.isfinite(p))))
             {
@@ -151,7 +151,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             triangulator.Run();
 
-            Assert.That(triangulator.Output.Status.Value, Is.EqualTo(Status.ERR));
+            return triangulator.Output.Status.Value;
         }
 
         private static readonly TestCaseData[] validateConstraintDelaunayTriangulationTestData = new[]
@@ -165,7 +165,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(0, 1),
                 },
                 new[]{ 0, 2, 1, 3 }
-            ) { TestName = "Test Case 1 (edge-edge intersection)" },
+            ) { TestName = "Test Case 1 (edge-edge intersection)", ExpectedResult = Status.ConstraintIntersection(0, 1) },
             new TestCaseData(
                 new[]
                 {
@@ -175,7 +175,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(0, 1),
                 },
                 new[]{ 0, 2, 0, 2 }
-            ) { TestName = "Test Case 2 (duplicated edge)" },
+            ) { TestName = "Test Case 2 (duplicated edge)", ExpectedResult = Status.DuplicateConstraint(0, 1) },
             new TestCaseData(
                 new[]
                 {
@@ -185,7 +185,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(0, 1),
                 },
                 new[]{ 0, 0 }
-            ) { TestName = "Test Case 3 (zero-length edge)" },
+            ) { TestName = "Test Case 3 (zero-length edge)", ExpectedResult = Status.ConstraintSelfLoop(0, new int2(0,0)) },
             new TestCaseData(
                 new[]
                 {
@@ -196,7 +196,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(0, 2),
                 },
                 new[]{ 0, 2 }
-            ) { TestName = "Test Case 4 (edge collinear with other point)" },
+            ) { TestName = "Test Case 4 (edge collinear with other point)", ExpectedResult = Status.PositionOnConstraint(1, new int2(0, 2)) },
             new TestCaseData(
                 new[]
                 {
@@ -206,7 +206,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(0, 1),
                 },
                 new[]{ 0, 5, 1 }
-            ) { TestName = "Test Case 5 (odd number of elements in constraints buffer)" },
+            ) { TestName = "Test Case 5 (odd number of elements in constraints buffer)", ExpectedResult = Status.ConstraintsLengthNotDivisibleBy2(3) },
             new TestCaseData(
                 new[]
                 {
@@ -216,7 +216,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(0, 1),
                 },
                 new[]{ -1, 1, 1, 1 }
-            ) { TestName = "Test Case 6a (constraint out of positions range)" },
+            ) { TestName = "Test Case 6a (constraint out of positions range)", ExpectedResult = Status.ConstraintOutOfBounds(0, new int2(-1, 1), 4) },
             new TestCaseData(
                 new[]
                 {
@@ -226,7 +226,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(0, 1),
                 },
                 new[]{ 1, -1, 1, 1 }
-            ) { TestName = "Test Case 6b (constraint out of positions range)" },
+            ) { TestName = "Test Case 6b (constraint out of positions range)", ExpectedResult = Status.ConstraintOutOfBounds(0, new int2(1, -1), 4) },
             new TestCaseData(
                 new[]
                 {
@@ -236,7 +236,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(0, 1),
                 },
                 new[]{ 5, 1, 1, 1 }
-            ) { TestName = "Test Case 6c (constraint out of positions range)" },
+            ) { TestName = "Test Case 6c (constraint out of positions range)", ExpectedResult = Status.ConstraintOutOfBounds(0, new int2(5, 1), 4) },
             new TestCaseData(
                 new[]
                 {
@@ -246,11 +246,11 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(0, 1),
                 },
                 new[]{ 1, 5, 1, 1 }
-            ) { TestName = "Test Case 6d (constraint out of positions range)" },
+            ) { TestName = "Test Case 6d (constraint out of positions range)", ExpectedResult = Status.ConstraintOutOfBounds(0, new int2(1, 5), 4) },
         };
 
         [Test, TestCaseSource(nameof(validateConstraintDelaunayTriangulationTestData))]
-        public void ValidateConstraintDelaunayTriangulationTest(float2[] managedPositions, int[] constraints)
+        public Status ValidateConstraintDelaunayTriangulationTest(float2[] managedPositions, int[] constraints)
         {
             using var positions = new NativeArray<T>(managedPositions.DynamicCast<T>(), Allocator.Persistent);
             using var constraintEdges = new NativeArray<int>(constraints, Allocator.Persistent);
@@ -271,14 +271,14 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             LogAssert.Expect(UnityEngine.LogType.Error, new Regex(".*"));
             triangulator.Run();
 
-            Assert.That(triangulator.Output.Status.Value, Is.EqualTo(Status.ERR));
+            return triangulator.Output.Status.Value;
         }
 
         private static readonly TestCaseData[] validateConstraintDelaunayTriangulationNoVerboseTestData = validateConstraintDelaunayTriangulationTestData
-            .Select(i => new TestCaseData(i.Arguments) { TestName = i.TestName[..^1] + ", no verbose" }).ToArray();
+            .Select(i => new TestCaseData(i.Arguments) { TestName = i.TestName[..^1] + ", no verbose", ExpectedResult = i.ExpectedResult }).ToArray();
 
         [Test, TestCaseSource(nameof(validateConstraintDelaunayTriangulationNoVerboseTestData))]
-        public void ValidateConstraintDelaunayTriangulationNoVerboseTest(float2[] managedPositions, int[] constraints)
+        public Status ValidateConstraintDelaunayTriangulationNoVerboseTest(float2[] managedPositions, int[] constraints)
         {
             using var positions = new NativeArray<T>(managedPositions.DynamicCast<T>(), Allocator.Persistent);
             using var constraintEdges = new NativeArray<int>(constraints, Allocator.Persistent);
@@ -298,7 +298,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             triangulator.Run();
 
-            Assert.That(triangulator.Output.Status.Value, Is.EqualTo(Status.ERR));
+            return triangulator.Output.Status.Value;
         }
 
         [Test]
@@ -1535,7 +1535,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             triangulator.Run();
 
-            Assert.That(triangulator.Output.Status.Value, Is.EqualTo(Status.ERR));
+            Assert.That(triangulator.Output.Status.Value, Is.EqualTo(Status.SloanMaxItersExceeded));
         }
 
         [Test]

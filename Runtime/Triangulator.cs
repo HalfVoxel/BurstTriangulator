@@ -14,18 +14,6 @@ using UnityEngine;
 
 namespace andywiecko.BurstTriangulator
 {
-    public enum Status
-    {
-        /// <summary>
-        /// State corresponds to triangulation completed successfully.
-        /// </summary>
-        OK = 0,
-        /// <summary>
-        /// State may suggest that some error occurs during triangulation. See console for more details.
-        /// </summary>
-        ERR = 1,
-    }
-
     public enum Preprocessor
     {
         None = 0,
@@ -189,7 +177,7 @@ namespace andywiecko.BurstTriangulator
         {
             outputPositions = new(capacity, allocator);
             triangles = new(6 * capacity, allocator);
-            status = new(Status.OK, allocator);
+            status = new(Status.Ok, allocator);
             halfedges = new(6 * capacity, allocator);
             constrainedHalfedges = new(6 * capacity, allocator);
             Output = new(this);
@@ -407,7 +395,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             if (!output.Halfedges.IsCreated) output.Halfedges = tmpHalfedges = new(6 * 16 * 1024, allocator);
             if (!output.ConstrainedHalfedges.IsCreated) output.ConstrainedHalfedges = tmpConstrainedHalfedges = new(6 * 16 * 1024, allocator);
 
-            output.Status.Value = Status.OK;
+            output.Status.Value = Status.Ok;
             output.Triangles.Clear();
             output.Positions.Clear();
             output.Halfedges.Clear();
@@ -422,11 +410,14 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             new RefineMeshStep(output, args, lt).Execute(allocator, refineMesh: args.RefineMesh, constrainBoundary: !input.ConstraintEdges.IsCreated || !args.RestoreBoundary);
             PostProcessInputStep(output, args, lt);
 
+            var status = output.Status.Value;
             if (localHoles.IsCreated) localHoles.Dispose();
             if (tmpStatus.IsCreated) tmpStatus.Dispose();
             if (tmpPositions.IsCreated) tmpPositions.Dispose();
             if (tmpHalfedges.IsCreated) tmpHalfedges.Dispose();
             if (tmpConstrainedHalfedges.IsCreated) tmpConstrainedHalfedges.Dispose();
+
+            if (args.Verbose && status.IsError) Debug.LogError(status.ToFixedString());
         }
 
         public void PlantHoleSeeds(InputData<T2> input, OutputData<T2> output, Args args, Allocator allocator)
@@ -510,20 +501,20 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
                 if (positions.Length < 3)
                 {
-                    Log($"[Triangulator]: Positions.Length is less then 3!");
-                    status.Value |= Status.ERR;
+                    status.Value = Status.PositionsLengthLessThan3(positions.Length);
                 }
 
                 for (int i = 0; i < positions.Length; i++)
                 {
                     if (!PointValidation(i))
                     {
-                        Log($"[Triangulator]: Positions[{i}] does not contain finite value: {positions[i]}!");
-                        status.Value |= Status.ERR;
+                        status.Value = Status.PositionsMustBeFinite(i);
+                        return;
                     }
-                    if (!PointPointValidation(i))
-                    {
-                        status.Value |= Status.ERR;
+                    var err = PointPointValidation(i);
+                    if (err.IsError) {
+                        status.Value = err;
+                        return;
                     }
                 }
 
@@ -534,19 +525,19 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
                 if (constraints.Length % 2 == 1)
                 {
-                    Log($"[Triangulator]: Constraint input buffer does not contain even number of elements!");
-                    status.Value |= Status.ERR;
+                    status.Value = Status.ConstraintsLengthNotDivisibleBy2(constraints.Length);
                     return;
                 }
 
                 for (int i = 0; i < constraints.Length / 2; i++)
                 {
-                    if (!EdgePositionsRangeValidation(i) ||
-                        !EdgeValidation(i) ||
-                        !EdgePointValidation(i) ||
-                        !EdgeEdgeValidation(i))
-                    {
-                        status.Value |= Status.ERR;
+                    var err = EdgePositionsRangeValidation(i);
+                    if (!err.IsError) err = EdgeValidation(i);
+                    if (!err.IsError) err = EdgePointValidation(i);
+                    if (!err.IsError) err = EdgeEdgeValidation(i);
+
+                    if (err.IsError) {
+                        status.Value = err;
                         return;
                     }
                 }
@@ -554,7 +545,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             private bool PointValidation(int i) => math.all(utils.isfinite(positions[i]));
 
-            private bool PointPointValidation(int i)
+            private Status PointPointValidation(int i)
             {
                 var pi = positions[i];
                 for (int j = i + 1; j < positions.Length; j++)
@@ -562,38 +553,35 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     var pj = positions[j];
                     if (math.all(utils.eq(pi, pj)))
                     {
-                        Log($"[Triangulator]: Positions[{i}] and [{j}] are duplicated with value: {pi}!");
-                        return false;
+                        return Status.DuplicatePosition(i);
                     }
                 }
-                return true;
+                return Status.Ok;
             }
 
-            private bool EdgePositionsRangeValidation(int i)
+            private Status EdgePositionsRangeValidation(int i)
             {
                 var (a0Id, a1Id) = (constraints[2 * i], constraints[2 * i + 1]);
                 var count = positions.Length;
                 if (a0Id >= count || a0Id < 0 || a1Id >= count || a1Id < 0)
                 {
-                    Log($"[Triangulator]: ConstraintEdges[{i}] = ({a0Id}, {a1Id}) is out of range Positions.Length = {count}!");
-                    return false;
+                    return Status.ConstraintOutOfBounds(i, new int2(a0Id, a1Id), count);
                 }
 
-                return true;
+                return Status.Ok;
             }
 
-            private bool EdgeValidation(int i)
+            private Status EdgeValidation(int i)
             {
                 var (a0Id, a1Id) = (constraints[2 * i], constraints[2 * i + 1]);
                 if (a0Id == a1Id)
                 {
-                    Log($"[Triangulator]: ConstraintEdges[{i}] is length zero!");
-                    return false;
+                    return Status.ConstraintSelfLoop(i, new int2(a0Id, a1Id));
                 }
-                return true;
+                return Status.Ok;
             }
 
-            private bool EdgePointValidation(int i)
+            private Status EdgePointValidation(int i)
             {
                 var (a0Id, a1Id) = (constraints[2 * i], constraints[2 * i + 1]);
                 var (a0, a1) = (positions[a0Id], positions[a1Id]);
@@ -608,28 +596,25 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     var p = positions[j];
                     if (PointLineSegmentIntersection(p, a0, a1))
                     {
-                        Log($"[Triangulator]: ConstraintEdges[{i}] and Positions[{j}] are collinear!");
-                        return false;
+                        return Status.PositionOnConstraint(j, new int2(a0Id, a1Id));
                     }
                 }
 
-                return true;
+                return Status.Ok;
             }
 
-            private bool EdgeEdgeValidation(int i)
+            private Status EdgeEdgeValidation(int i)
             {
                 for (int j = i + 1; j < constraints.Length / 2; j++)
                 {
-                    if (!ValidatePair(i, j))
-                    {
-                        return false;
-                    }
+                    var err = ValidatePair(i, j);
+                    if (err.IsError) return err;
                 }
 
-                return true;
+                return Status.Ok;
             }
 
-            private bool ValidatePair(int i, int j)
+            private Status ValidatePair(int i, int j)
             {
                 var (a0Id, a1Id) = (constraints[2 * i], constraints[2 * i + 1]);
                 var (b0Id, b1Id) = (constraints[2 * j], constraints[2 * j + 1]);
@@ -638,32 +623,22 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 if (a0Id == b0Id && a1Id == b1Id ||
                     a0Id == b1Id && a1Id == b0Id)
                 {
-                    Log($"[Triangulator]: ConstraintEdges[{i}] and [{j}] are equivalent!");
-                    return false;
+                    return Status.DuplicateConstraint(i, j);
                 }
 
                 // One common point, cases should be filtered out at EdgePointValidation
                 if (a0Id == b0Id || a0Id == b1Id || a1Id == b0Id || a1Id == b1Id)
                 {
-                    return true;
+                    return Status.Ok;
                 }
 
                 var (a0, a1, b0, b1) = (positions[a0Id], positions[a1Id], positions[b0Id], positions[b1Id]);
                 if (EdgeEdgeIntersection(a0, a1, b0, b1))
                 {
-                    Log($"[Triangulator]: ConstraintEdges[{i}] and [{j}] intersect!");
-                    return false;
+                    return Status.ConstraintIntersection(i, j);
                 }
 
-                return true;
-            }
-
-            private readonly void Log(string message)
-            {
-                if (args.Verbose)
-                {
-                    Debug.LogError(message);
-                }
+                return Status.Ok;
             }
         }
 
@@ -722,7 +697,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             {
                 using var _ = new ProfilerMarker($"{nameof(DelaunayTriangulationStep)}").Auto();
 
-                if (status.Value == Status.ERR)
+                if (status.Value.IsError)
                 {
                     return;
                 }
@@ -805,11 +780,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
                 if (minRadius.CompareTo(utils.MaxValue()) == 0)
                 {
-                    if (verbose)
-                    {
-                        Debug.LogError("[Triangulator]: Duplicate points, or only colinear points, are not supported.");
-                    }
-                    status.Value |= Status.ERR;
+                    status.Value = Status.DegenerateInput;
                     return;
                 }
 
@@ -1099,7 +1070,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             {
                 using var _ = new ProfilerMarker($"{nameof(ConstrainEdgesStep)}").Auto();
 
-                if (!inputConstraintEdges.IsCreated || status.Value != Status.OK)
+                if (!inputConstraintEdges.IsCreated || status.Value.IsError)
                 {
                     return;
                 }
@@ -1135,7 +1106,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 var iter = 0;
                 do
                 {
-                    if ((status.Value & Status.ERR) == Status.ERR)
+                    if (status.Value.IsError)
                     {
                         return;
                     }
@@ -1422,15 +1393,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             {
                 if (iter >= maxIters)
                 {
-                    if (args.Verbose)
-                    {
-                        Debug.LogError(
-                            $"[Triangulator]: Sloan max iterations exceeded! This may suggest that input data is hard to resolve by Sloan's algorithm. " +
-                            $"It usually happens when the scale of the input positions is not uniform. " +
-                            $"Please try to post-process input data or increase {nameof(TriangulationSettings.SloanMaxIters)} value."
-                        );
-                    }
-                    status.Value |= Status.ERR;
+                    status.Value = Status.SloanMaxItersExceeded;
                     return true;
                 }
                 return false;
@@ -1474,7 +1437,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             {
                 using var _ = new ProfilerMarker($"{nameof(PlantingSeedStep)}").Auto();
 
-                if (!constraintsIsCreated || status.IsCreated && status.Value != Status.OK)
+                if (!constraintsIsCreated || status.IsCreated && status.Value.IsError)
                 {
                     return;
                 }
@@ -1784,15 +1747,14 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             {
                 using var _ = new ProfilerMarker($"{nameof(RefineMeshStep)}").Auto();
 
-                if (!refineMesh || status.IsCreated && status.Value != Status.OK)
+                if (!refineMesh || status.IsCreated && status.Value.IsError)
                 {
                     return;
                 }
 
                 if (!utils.SupportsRefinement())
                 {
-                    Debug.LogError("Mesh refinement is not supported for this coordinate type.");
-                    status.Value |= Status.ERR;
+                    status.Value = Status.IntegersDoNotSupportMeshRefinement;
                     return;
                 }
 

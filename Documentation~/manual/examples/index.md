@@ -17,7 +17,7 @@ triangulator.Run();
 var triangles = triangulator.Output.Triangles;
 ```
 
-> [!TIP]  
+> [!TIP]
 > The [`triangulator.Run()`][run] method runs on the main thread.
 > If you want to call this within a jobs pipeline, schedule a job using [`triangulator.Schedule(dependencies)`][schedule].
 > Click [**here**](xref:example-unity-jobs) to learn how to use triangulation within a jobs pipeline.
@@ -26,8 +26,9 @@ If triangulation fails for some reason, you can catch the information using [`St
 
 ```csharp
 status = triangulator.Output.Status.Value;
-if (status == Triangulator.Status.ERR) // ERROR!
+if (status.IsError) // ERROR!
 {
+  Debug.LogError(status);
   return;
 }
 ```
