@@ -1922,7 +1922,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 }
                 else
                 {
-                    var alpha = utils.alpha(D: utils.Const(ConcentricShellReferenceRadius), dSquare: utils.Cast(utils.distancesq(e0, e1)));
+                    var alpha = utils.alpha(utils.Const(ConcentricShellReferenceRadius), dSquare: utils.Cast(utils.distancesq(e0, e1)));
                     // Swap points to provide symmetry in splitting
                     p = i < initialPointsCount ? utils.lerp(e0, e1, alpha) : utils.lerp(e1, e0, alpha);
                 }
@@ -2864,9 +2864,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         public readonly float Zero() => 0;
         public readonly float ZeroTBig() => 0;
         public readonly float abs(float v) => math.abs(v);
-        public readonly float alpha(float concentricShellReferenceRadius, float dSquare)
+        public readonly float alpha(float concentricShellReferenceRadius, float edgeLengthSq)
         {
-            var d = math.sqrt(dSquare);
+            var d = math.sqrt(edgeLengthSq);
             var k = (int)math.round(math.log2(0.5f * d / concentricShellReferenceRadius));
             return concentricShellReferenceRadius / d * (k < 0 ? math.pow(2, k) : 1 << k);
         }
@@ -2958,9 +2958,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         public readonly double Zero() => 0;
         public readonly double ZeroTBig() => 0;
         public readonly double abs(double v) => math.abs(v);
-        public readonly double alpha(double concentricShellReferenceRadius, double dSquare)
+        public readonly double alpha(double concentricShellReferenceRadius, double edgeLengthSq)
         {
-            var d = math.sqrt(dSquare);
+            var d = math.sqrt(edgeLengthSq);
             var k = (int)math.round(math.log2(0.5 * d / concentricShellReferenceRadius));
             return concentricShellReferenceRadius / d * (k < 0 ? math.pow(2, k) : 1 << k);
         }
@@ -3054,7 +3054,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         public readonly long ZeroTBig() => 0;
         public readonly int abs(int v) => math.abs(v);
         public readonly long abs(long v) => math.abs(v);
-        public readonly int alpha(int concentricShellReferenceRadius, int dSquare) => throw new NotImplementedException();
+        public readonly int alpha(int concentricShellReferenceRadius, int edgeLengthSq) => throw new NotImplementedException();
         public readonly bool anygreaterthan(int a, int b, int c, int v) => throw new NotImplementedException();
         public readonly int2 avg(int2 a, int2 b) => (a + b) / 2;
         public readonly int cos(int v) => throw new NotImplementedException();
