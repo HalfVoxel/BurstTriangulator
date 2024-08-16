@@ -1818,7 +1818,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     return;
                 }
 
-                if (!utils.SupportRefinement())
+                if (!utils.SupportsRefinement())
                 {
                     Debug.LogError("Mesh refinement is not supported for this coordinate type.");
                     status.Value |= Status.ERR;
@@ -2761,7 +2761,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         T2 MaxValue2();
         T2 MinValue2();
         bool PointInsideTriangle(T2 p, T2 a, T2 b, T2 c);
-        bool SupportRefinement();
+        bool SupportsRefinement();
         T X(T2 v);
         T Y(T2 v);
         T Zero();
@@ -2859,7 +2859,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             // NOTE: use barycentric property.
             return math.cmax(-bar(a, b, c, p)) <= 0;
         }
-        public readonly bool SupportRefinement() => true;
+        public readonly bool SupportsRefinement() => true;
         public readonly float X(float2 a) => a.x;
         public readonly float Y(float2 a) => a.y;
         public readonly float Zero() => 0;
@@ -2953,7 +2953,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             // NOTE: use barycentric property.
             return math.cmax(-bar(a, b, c, p)) <= 0;
         }
-        public readonly bool SupportRefinement() => true;
+        public readonly bool SupportsRefinement() => true;
         public readonly double X(double2 a) => a.x;
         public readonly double Y(double2 a) => a.y;
         public readonly double Zero() => 0;
@@ -3048,7 +3048,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             // NOTE: triangle orientation is guaranteed.
             return cross(p - a, b - a) >= 0 && cross(p - b, c - b) >= 0 && cross(p - c, a - c) >= 0;
         }
-        public readonly bool SupportRefinement() => false;
+        public readonly bool SupportsRefinement() => false;
         public readonly int X(int2 a) => a.x;
         public readonly int Y(int2 a) => a.y;
         public readonly int Zero() => 0;
