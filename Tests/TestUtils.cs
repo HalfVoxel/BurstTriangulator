@@ -41,7 +41,27 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 return t;
             }
 
-            return Enumerable.SequenceEqual(sort(_x), sort(_y));
+            var leftIndices = sort(_x);
+            var rightIndices = sort(_y);
+            var eq = Enumerable.SequenceEqual(leftIndices, rightIndices);
+            if (!eq) {
+                var leftTris = leftIndices.Reinterpret<int3>(4);
+                var rightTris = rightIndices.Reinterpret<int3>(4);
+                var s = "";
+                for (int i = 0; i < Mathf.Max(leftTris.Length, rightTris.Length); i++) {
+                    var l = i < leftTris.Length ? $"({leftTris[i].x}, {leftTris[i].y}, {leftTris[i].z})" : "<?>";
+                    var r = i < rightTris.Length ? $"({rightTris[i].x}, {rightTris[i].y}, {rightTris[i].z})" : "<?>";
+                    if (l == r) {
+                        s += $"{l} == {r}\n";
+                    } else {
+                        s += $"{l} != {r} <---\n";
+                    }
+                }
+                // This logs an error to the console, which is bad style to do from a comparer.
+                // But we only use this in tests, and this error message makes it so much easier to see what went wrong.
+                Debug.LogError(s);
+            }
+            return eq;
         }
 
         public int GetHashCode(IEnumerable<int> obj) => default;
