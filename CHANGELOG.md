@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 For online version see [Github Releases].
 
+## Unpublished
+
+- Removed the concentric shells parameter from the settings. It is now a hardcoded constant that should work well for all triangulations.
+
 ## [3.1.0] – 2024-08-01
 
 ### Added

@@ -110,12 +110,6 @@ namespace andywiecko.BurstTriangulator
         [field: SerializeField]
         public int SloanMaxIters { get; set; } = 1_000_000;
         /// <summary>
-        /// Constant used in <em>concentric shells</em> segment splitting.
-        /// <b>Modify this only if you know what you are doing!</b>
-        /// </summary>
-        [field: SerializeField]
-        public float ConcentricShellsParameter { get; set; } = 0.001f;
-        /// <summary>
         /// Preprocessing algorithm for the input data. Default is <see cref="Preprocessor.None"/>.
         /// </summary>
         [field: SerializeField]
@@ -283,17 +277,16 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         public readonly Preprocessor Preprocessor;
         public readonly int SloanMaxIters;
         public readonly bool AutoHolesAndBoundary, RefineMesh, RestoreBoundary, ValidateInput, Verbose;
-        public readonly float ConcentricShellsParameter, RefinementThresholdAngle, RefinementThresholdArea;
+        public readonly float RefinementThresholdAngle, RefinementThresholdArea;
 
         public Args(
             Preprocessor preprocessor,
             int sloanMaxIters,
             bool autoHolesAndBoundary, bool refineMesh, bool restoreBoundary, bool validateInput, bool verbose,
-            float concentricShellsParameter, float refinementThresholdAngle, float refinementThresholdArea
+            float refinementThresholdAngle, float refinementThresholdArea
         )
         {
             AutoHolesAndBoundary = autoHolesAndBoundary;
-            ConcentricShellsParameter = concentricShellsParameter;
             Preprocessor = preprocessor;
             RefineMesh = refineMesh;
             RestoreBoundary = restoreBoundary;
@@ -308,17 +301,16 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             Preprocessor preprocessor = Preprocessor.None,
             int sloanMaxIters = 1_000_000,
             bool autoHolesAndBoundary = false, bool refineMesh = false, bool restoreBoundary = false, bool validateInput = true, bool verbose = true,
-            float concentricShellsParameter = 0.001f, float refinementThresholdAngle = 0.0872664626f, float refinementThresholdArea = 1f
+            float refinementThresholdAngle = 0.0872664626f, float refinementThresholdArea = 1f
         ) => new(
             preprocessor,
             sloanMaxIters,
             autoHolesAndBoundary, refineMesh, restoreBoundary, validateInput, verbose,
-            concentricShellsParameter, refinementThresholdAngle, refinementThresholdArea
+            refinementThresholdAngle, refinementThresholdArea
         );
 
         public static implicit operator Args(TriangulationSettings settings) => new(
             autoHolesAndBoundary: settings.AutoHolesAndBoundary,
-            concentricShellsParameter: settings.ConcentricShellsParameter,
             preprocessor: settings.Preprocessor,
             refineMesh: settings.RefineMesh,
             restoreBoundary: settings.RestoreBoundary,
@@ -333,12 +325,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             Preprocessor? preprocessor = null,
             int? sloanMaxIters = null,
             bool? autoHolesAndBoundary = null, bool? refineMesh = null, bool? restoreBoundary = null, bool? validateInput = null, bool? verbose = null,
-            float? concentricShellsParameter = null, float? refinementThresholdAngle = null, float? refinementThresholdArea = null
+            float? refinementThresholdAngle = null, float? refinementThresholdArea = null
         ) => new(
             preprocessor ?? Preprocessor,
             sloanMaxIters ?? SloanMaxIters,
             autoHolesAndBoundary ?? AutoHolesAndBoundary, refineMesh ?? RefineMesh, restoreBoundary ?? RestoreBoundary, validateInput ?? ValidateInput, verbose ?? Verbose,
-            concentricShellsParameter ?? ConcentricShellsParameter, refinementThresholdAngle ?? RefinementThresholdAngle, refinementThresholdArea ?? RefinementThresholdArea
+            refinementThresholdAngle ?? RefinementThresholdAngle, refinementThresholdArea ?? RefinementThresholdArea
         );
     }
 
@@ -349,18 +341,18 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
     {
         public static void Triangulate(this UnsafeTriangulator @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().Triangulate(input, output, args, allocator);
         public static void PlantHoleSeeds(this UnsafeTriangulator @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().PlantHoleSeeds(input, output, args, allocator);
-        public static void RefineMesh(this UnsafeTriangulator @this, OutputData<double2> output, Allocator allocator, double areaThreshold = 1, double angleThreshold = 0.0872664626, double concentricShells = 0.001, bool constrainBoundary = false) =>
-            new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, concentricShells, constrainBoundary);
+        public static void RefineMesh(this UnsafeTriangulator @this, OutputData<double2> output, Allocator allocator, double areaThreshold = 1, double angleThreshold = 0.0872664626, bool constrainBoundary = false) =>
+            new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
 
         public static void Triangulate(this UnsafeTriangulator<float2> @this, InputData<float2> input, OutputData<float2> output, Args args, Allocator allocator) => new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().Triangulate(input, output, args, allocator);
         public static void PlantHoleSeeds(this UnsafeTriangulator<float2> @this, InputData<float2> input, OutputData<float2> output, Args args, Allocator allocator) => new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().PlantHoleSeeds(input, output, args, allocator);
-        public static void RefineMesh(this UnsafeTriangulator<float2> @this, OutputData<float2> output, Allocator allocator, float areaThreshold = 1, float angleThreshold = 0.0872664626f, float concentricShells = 0.001f, bool constrainBoundary = false) =>
-            new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, concentricShells, constrainBoundary);
+        public static void RefineMesh(this UnsafeTriangulator<float2> @this, OutputData<float2> output, Allocator allocator, float areaThreshold = 1, float angleThreshold = 0.0872664626f, bool constrainBoundary = false) =>
+            new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
 
         public static void Triangulate(this UnsafeTriangulator<double2> @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().Triangulate(input, output, args, allocator);
         public static void PlantHoleSeeds(this UnsafeTriangulator<double2> @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().PlantHoleSeeds(input, output, args, allocator);
-        public static void RefineMesh(this UnsafeTriangulator<double2> @this, OutputData<double2> output, Allocator allocator, double areaThreshold = 1, double angleThreshold = 0.0872664626, double concentricShells = 0.001, bool constrainBoundary = false) =>
-            new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, concentricShells, constrainBoundary);
+        public static void RefineMesh(this UnsafeTriangulator<double2> @this, OutputData<double2> output, Allocator allocator, double areaThreshold = 1, double angleThreshold = 0.0872664626, bool constrainBoundary = false) =>
+            new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
 
         public static void Triangulate(this UnsafeTriangulator<int2> @this, InputData<int2> input, OutputData<int2> output, Args args, Allocator allocator) => new UnsafeTriangulator<int, int2, long, TranslationInt, IntUtils>().Triangulate(input, output, args, allocator);
         public static void PlantHoleSeeds(this UnsafeTriangulator<int2> @this, InputData<int2> input, OutputData<int2> output, Args args, Allocator allocator) => new UnsafeTriangulator<int, int2, long, TranslationInt, IntUtils>().PlantHoleSeeds(input, output, args, allocator);
@@ -470,9 +462,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             new PlantingSeedStep(input, output, args).Execute(allocator, true);
         }
 
-        public void RefineMesh(OutputData<T2> output, Allocator allocator, T area2Threshold, T angleThreshold, T shells, bool constrainBoundary = false)
+        public void RefineMesh(OutputData<T2> output, Allocator allocator, T area2Threshold, T angleThreshold, bool constrainBoundary = false)
         {
-            new RefineMeshStep(output, area2Threshold, angleThreshold, shells).Execute(allocator, refineMesh: true, constrainBoundary);
+            new RefineMeshStep(output, area2Threshold, angleThreshold).Execute(allocator, refineMesh: true, constrainBoundary);
         }
 
         private void PreProcessInputStep(InputData<T2> input, OutputData<T2> output, Args args, out NativeArray<T2> localHoles, out TTransform lt, Allocator allocator)
@@ -1780,22 +1772,29 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private NativeList<int> pathHalfedges;
             private NativeList<bool> visitedTriangles;
 
-            private readonly T maximumArea2, angleThreshold, shells;
+            private readonly T maximumArea2, angleThreshold;
             private readonly int initialPointsCount;
+
+            /// <summary>
+            /// A parameter for the concentric shells edge splitting algorithm.
+            /// This is a pretty arbitrary constant. Changing it has a minor effect on the triangulation, but only in rare situations.
+            /// Pretty much any value is as good as any other.
+            ///
+            /// See `Delaunay Refinement Algorithm for Quality 2-Dimensional Mesh Generation` page 40.
+            /// </summary>
+            const float ConcentricShellReferenceRadius = 0.001f;
 
             public RefineMeshStep(OutputData<T2> output, Args args, TTransform lt) : this(output,
                 area2Threshold: utils.Cast(utils.mul(utils.Cast(utils.mul(utils.Const(2), utils.Const(args.RefinementThresholdArea))), lt.AreaScalingFactor)),
-                angleThreshold: utils.Const(args.RefinementThresholdAngle),
-                shells: utils.Const(args.ConcentricShellsParameter))
+                angleThreshold: utils.Const(args.RefinementThresholdAngle))
             { }
 
-            public RefineMeshStep(OutputData<T2> output, T area2Threshold, T angleThreshold, T shells)
+            public RefineMeshStep(OutputData<T2> output, T area2Threshold, T angleThreshold)
             {
                 status = output.Status;
                 initialPointsCount = output.Positions.Length;
                 maximumArea2 = area2Threshold;
                 this.angleThreshold = angleThreshold;
-                this.shells = shells;
                 triangles = output.Triangles;
                 outputPositions = output.Positions;
                 halfedges = output.Halfedges;
@@ -1923,7 +1922,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 }
                 else
                 {
-                    var alpha = utils.alpha(D: shells, dSquare: utils.Cast(utils.distancesq(e0, e1)));
+                    var alpha = utils.alpha(D: utils.Const(ConcentricShellReferenceRadius), dSquare: utils.Cast(utils.distancesq(e0, e1)));
                     // Swap points to provide symmetry in splitting
                     p = i < initialPointsCount ? utils.lerp(e0, e1, alpha) : utils.lerp(e1, e0, alpha);
                 }
@@ -2772,7 +2771,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         /// <summary>
         /// Returns concentric shells segment splitting factor.
         /// </summary>
-        /// <param name="D">Concentric shells parameter constant.</param>
+        /// <param name="concentricShellReferenceRadius">Concentric shells parameter constant.</param>
         /// <param name="dSquare">Segment length squared.</param>
         /// <returns><i>alpha</i> in [0, 1] range.</returns>
         /// <remarks>
@@ -2781,7 +2780,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         /// J. Ruppert. "A Delaunay Refinement Algorithm for Quality 2-Dimensional Mesh Generation". <i>J. Algorithms</i> <b>18</b>(3):548-585 (1995)
         /// </see>.
         /// </remarks>
-        T alpha(T D, T dSquare);
+        T alpha(T concentricShellReferenceRadius, T dSquare);
         bool anygreaterthan(T a, T b, T c, T v);
         T2 avg(T2 a, T2 b);
         T cos(T v);
@@ -2865,11 +2864,11 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         public readonly float Zero() => 0;
         public readonly float ZeroTBig() => 0;
         public readonly float abs(float v) => math.abs(v);
-        public readonly float alpha(float D, float dSquare)
+        public readonly float alpha(float concentricShellReferenceRadius, float dSquare)
         {
             var d = math.sqrt(dSquare);
-            var k = (int)math.round(math.log2(0.5f * d / D));
-            return D / d * (k < 0 ? math.pow(2, k) : 1 << k);
+            var k = (int)math.round(math.log2(0.5f * d / concentricShellReferenceRadius));
+            return concentricShellReferenceRadius / d * (k < 0 ? math.pow(2, k) : 1 << k);
         }
         public readonly bool anygreaterthan(float a, float b, float c, float v) => math.any(math.float3(a, b, c) > v);
         public readonly float2 avg(float2 a, float2 b) => 0.5f * (a + b);
@@ -2959,11 +2958,11 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         public readonly double Zero() => 0;
         public readonly double ZeroTBig() => 0;
         public readonly double abs(double v) => math.abs(v);
-        public readonly double alpha(double D, double dSquare)
+        public readonly double alpha(double concentricShellReferenceRadius, double dSquare)
         {
             var d = math.sqrt(dSquare);
-            var k = (int)math.round(math.log2(0.5 * d / D));
-            return D / d * (k < 0 ? math.pow(2, k) : 1 << k);
+            var k = (int)math.round(math.log2(0.5 * d / concentricShellReferenceRadius));
+            return concentricShellReferenceRadius / d * (k < 0 ? math.pow(2, k) : 1 << k);
         }
         public readonly bool anygreaterthan(double a, double b, double c, double v) => math.any(math.double3(a, b, c) > v);
         public readonly double2 avg(double2 a, double2 b) => 0.5f * (a + b);
@@ -3055,7 +3054,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         public readonly long ZeroTBig() => 0;
         public readonly int abs(int v) => math.abs(v);
         public readonly long abs(long v) => math.abs(v);
-        public readonly int alpha(int D, int dSquare) => throw new NotImplementedException();
+        public readonly int alpha(int concentricShellReferenceRadius, int dSquare) => throw new NotImplementedException();
         public readonly bool anygreaterthan(int a, int b, int c, int v) => throw new NotImplementedException();
         public readonly int2 avg(int2 a, int2 b) => (a + b) / 2;
         public readonly int cos(int v) => throw new NotImplementedException();

@@ -22,7 +22,6 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             Assert.That(args.RestoreBoundary, Is.EqualTo(settings.RestoreBoundary));
             Assert.That(args.ValidateInput, Is.EqualTo(settings.ValidateInput));
             Assert.That(args.Verbose, Is.EqualTo(settings.Verbose));
-            Assert.That(args.ConcentricShellsParameter, Is.EqualTo(settings.ConcentricShellsParameter));
             Assert.That(args.RefinementThresholdAngle, Is.EqualTo(settings.RefinementThresholds.Angle));
             Assert.That(args.RefinementThresholdArea, Is.EqualTo(settings.RefinementThresholds.Area));
         }
@@ -81,7 +80,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             // All containers allocated with Allocator.Temp on the same thread use a shared
             // AtomicSafetyHandle instance rather than each having their own. Most of the time,
             // this isn't an issue because you can't pass Temp allocated collections into a job.
-            // 
+            //
             // However, when you use Native*HashMap, NativeParallelMultiHashMap, Native*HashSet,
             // and NativeList together with their secondary safety handle, this shared AtomicSafetyHandle
             // instance is a problem.
