@@ -2463,7 +2463,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             utils.mul(utils.diff(utils.Y(b), utils.Y(a)), utils.diff(utils.X(c), utils.X(a)))
         );
         /// <summary>
-        /// Returns <see langword="true"/> if edge (<paramref name="a0"/>, <paramref name="a1"/>) intersects 
+        /// Returns <see langword="true"/> if edge (<paramref name="a0"/>, <paramref name="a1"/>) intersects
         /// (<paramref name="b0"/>, <paramref name="b1"/>), <see langword="false"/> otherwise.
         /// </summary>
         /// <remarks>
@@ -2743,6 +2743,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
     internal interface IUtils<T, T2, TBig> where T : unmanaged where T2 : unmanaged where TBig : unmanaged
     {
         /// <summary>
+        /// Cast a float to T. Note that for integer coordinates, this will be floored.
         /// <b>Warning!</b> This operation may cause precission loss, use with caution.
         /// </summary>
         T Cast(TBig v);
@@ -3002,9 +3003,17 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             var cl = (long)e.x * e.x + (long)e.y * e.y;
 
             var div = (long)d.x * e.y - (long)d.y * e.x;
-            // NOTE: In a case when div = 0 (i.e. circumcenter is not well defined) we use int.MaxValue to mimic the infinity.
-            return div == 0 ? new(int.MaxValue) : (int2)math.round(a + (0.5 / div) * (bl * math.double2(e.y, -e.x) + cl * math.double2(-d.y, d.x)));
+
+            // If the triangle is degenerate (just a line), then we should return a point at infinity,
+            // because the circumcenter is not well-defined for this case.
+            // Integers do not have infinites, but we can use the maximum value as a substitute.
+            if (div == 0) return new(int.MaxValue);
+
+            // Note: Doubles can represent all integers up to 2^53 exactly,
+            // so they can represent all int32 coordinates, and thus it is safe to cast here.
+            return (int2)math.round(a + (0.5 / div) * (bl * math.double2(e.y, -e.x) + cl * math.double2(-d.y, d.x)));
         }
+
         public readonly int Const(float v) => (int)v;
         public readonly long EPSILON() => 0;
         public readonly bool InCircle(int2 a, int2 b, int2 c, int2 p)
