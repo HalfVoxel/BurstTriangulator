@@ -438,10 +438,10 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             var tmpPositions = default(NativeList<T2>);
             var tmpHalfedges = default(NativeList<int>);
             var tmpConstrainedHalfedges = default(NativeList<bool>);
-            output.Status = output.Status.IsCreated ? output.Status : tmpStatus = new(allocator);
-            output.Positions = output.Positions.IsCreated ? output.Positions : tmpPositions = new(16 * 1024, allocator);
-            output.Halfedges = output.Halfedges.IsCreated ? output.Halfedges : tmpHalfedges = new(6 * 16 * 1024, allocator);
-            output.ConstrainedHalfedges = output.ConstrainedHalfedges.IsCreated ? output.ConstrainedHalfedges : tmpConstrainedHalfedges = new(6 * 16 * 1024, allocator);
+            if (!output.Status.IsCreated) output.Status = tmpStatus = new(allocator);
+            if (!output.Positions.IsCreated) output.Positions = tmpPositions = new(16 * 1024, allocator);
+            if (!output.Halfedges.IsCreated) output.Halfedges = tmpHalfedges = new(6 * 16 * 1024, allocator);
+            if (!output.ConstrainedHalfedges.IsCreated) output.ConstrainedHalfedges = tmpConstrainedHalfedges = new(6 * 16 * 1024, allocator);
 
             output.Status.Value = Status.OK;
             output.Triangles.Clear();
