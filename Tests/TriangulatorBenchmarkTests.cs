@@ -198,8 +198,8 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
         }
 
         private static readonly TestCaseData[] constraintBenchmarkTestData = Enumerable
-            .Range(0, 80)
-            .Select(i => new TestCaseData((100, 3 * (i + 1))))
+            .Range(0, 8)
+            .Select(i => new TestCaseData((100, 3 * 10 * (i + 1))))
             .ToArray();
 
         InputData<float2> ConstraintInput(int count, int N) {
