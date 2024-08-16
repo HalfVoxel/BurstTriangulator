@@ -449,9 +449,10 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             output.Halfedges.Clear();
             output.ConstrainedHalfedges.Clear();
 
+            // After this step, the positions have been moved to output.Positions (possibly modified by a preprocessor)
             PreProcessInputStep(input, output, args, out var localHoles, out var lt, allocator);
             new ValidateInputStep(input, output, args).Execute();
-            new DelaunayTriangulationStep(input, output, args).Execute(allocator);
+            new DelaunayTriangulationStep(output, args).Execute(allocator);
             new ConstrainEdgesStep(input, output, args).Execute(allocator);
             new PlantingSeedStep(input, output, args, localHoles).Execute(allocator, input.ConstraintEdges.IsCreated);
             new RefineMeshStep(output, args, lt).Execute(allocator, refineMesh: args.RefineMesh, constrainBoundary: !input.ConstraintEdges.IsCreated || !args.RestoreBoundary);
@@ -732,9 +733,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private int trianglesLen;
             private T2 c;
 
-            public DelaunayTriangulationStep(InputData<T2> input, OutputData<T2> output, Args args)
+
+
+            public DelaunayTriangulationStep(OutputData<T2> output, Args args)
             {
                 status = output.Status;
+                // Note: At this point these are the input positions (possibly transformed by a preprocessor)
                 positions = output.Positions.AsReadOnly();
                 triangles = output.Triangles;
                 halfedges = output.Halfedges;
