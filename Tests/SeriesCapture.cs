@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -166,6 +165,36 @@ namespace Benchy {
 			System.IO.File.WriteAllText(path, JsonUtility.ToJson(this, true));
 		}
 
+		public string GenerateSummary () {
+			var sb = new System.Text.StringBuilder();
+			sb.AppendLine("Benchmark Summary:");
+			sb.AppendLine("Version: " + version + " #" + gitHash);
+			sb.AppendLine();
+			foreach (var g in series.GroupBy(s => s.name).ToList()) {
+				sb.Append(g.Key);
+				if (g.Count() > 1) sb.AppendLine();
+				foreach (var s in g) {
+					var title = "";
+					if (s.aspects.Length > 0) {
+						foreach (var a in s.aspects) {
+							title += " " + a.name + "=" + a.value;
+						}
+						sb.Append("  " + title.PadRight(20));
+					}
+
+					var stat = s.CalculateStatistics();
+					var unit = s.unit;
+					if (s.unit == "TimeNanoseconds") {
+						stat.mean /= 1000000;
+						stat.stdDev /= 1000000;
+						unit = "ms";
+					}
+					sb.AppendLine(" => " + stat.mean.ToString("0.000") + " ± " + stat.stdDev.ToString("0.000") + " " + unit);
+				}
+			}
+			return sb.ToString();
+		}
+
 		public void RecordSeries(string name, string description, System.Action action) => RecordSeries(name, description, null, action);
 
 		/** Record a series of measurements.
@@ -229,6 +258,28 @@ namespace Benchy {
 			for (int i = 0; i < samples.Count; i++) {
 				if (samples[i].Count != 1) throw new System.Exception("Count should be 1");
 			}
+		}
+
+		public struct Statistics {
+			public double mean;
+			public double stdDev;
+		}
+
+		public Statistics CalculateStatistics () {
+			// Calculate mean and standard deviation
+			var mean = 0.0;
+			foreach (var s in samples) mean += s;
+			mean /= samples.Length;
+
+			var variance = 0.0;
+			foreach (var s in samples) variance += (s - mean) * (s - mean);
+
+			var stdDev = System.Math.Sqrt(variance / samples.Length);
+
+			return new Statistics {
+				mean = mean,
+				stdDev = stdDev
+			};
 		}
 	}
 }
