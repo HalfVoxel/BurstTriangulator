@@ -2467,9 +2467,11 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         /// (<paramref name="b0"/>, <paramref name="b1"/>), <see langword="false"/> otherwise.
         /// </summary>
         /// <remarks>
-        /// This method will not catch intersecting collinear edges. See unit tests for more details.
+        /// This method will not catch intersecting collinear segments. See unit tests for more details.
+        /// Segments intersecting only at their endpoints may or may not return true, depending on their orientation.
         /// </remarks>
         internal static bool EdgeEdgeIntersection(T2 a0, T2 a1, T2 b0, T2 b1) => ccw(a0, a1, b0) != ccw(a0, a1, b1) && ccw(b0, b1, a0) != ccw(b0, b1, a1);
+
         private static int NextHalfedge(int he) => he % 3 == 2 ? he - 2 : he + 1;
         internal static bool IsConvexQuadrilateral(T2 a, T2 b, T2 c, T2 d) => true
             && utils.greater(utils.abs(Orient2dFast(a, c, b)), utils.EPSILON())
