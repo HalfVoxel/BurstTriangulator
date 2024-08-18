@@ -919,7 +919,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             private int Legalize(int a)
             {
-                var i = 0;
+                var stackSize = 0;
                 int ar;
 
                 // recursion eliminated with a fixed-size stack
@@ -948,8 +948,8 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     // Check if we are on a convex hull edge
                     if (b == -1)
                     {
-                        if (i == 0) break;
-                        a = EDGE_STACK[--i];
+                        if (stackSize == 0) break;
+                        a = EDGE_STACK[--stackSize];
                         continue;
                     }
 
@@ -992,15 +992,15 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                         var br = b0 + (b + 1) % 3;
 
                         // Don't worry about hitting the cap: it can only happen on extremely degenerate input
-                        if (i < EDGE_STACK.Length)
+                        if (stackSize < EDGE_STACK.Length)
                         {
-                            EDGE_STACK[i++] = br;
+                            EDGE_STACK[stackSize++] = br;
                         }
                     }
                     else
                     {
-                        if (i == 0) break;
-                        a = EDGE_STACK[--i];
+                        if (stackSize == 0) break;
+                        a = EDGE_STACK[--stackSize];
                     }
                 }
 
