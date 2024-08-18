@@ -1530,6 +1530,8 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 trianglesQueue.Enqueue(tId);
                 badTriangles.Add(tId);
 
+                // Search outwards from the seed triangle and mark all triangles
+                // until we get to a constrained edge, or a previously visited triangle.
                 while (trianglesQueue.TryDequeue(out tId))
                 {
                     for (int i = 0; i < 3; i++)
