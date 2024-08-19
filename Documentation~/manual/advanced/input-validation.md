@@ -8,7 +8,6 @@ If [`ValidateInput`][validate] is set to true, the provided data will be validat
 - Constraint edges cannot intersect with each other.
 - Constraint edges cannot be duplicated or swapped duplicated.
 - Zero-length constraint edges are forbidden.
-- Constraint edges cannot intersect with points other than the points for which they are defined.
 
 If any of these conditions fail, triangulation will not be calculated. You can catch this as an error by using [`Status`][status] (native, can be used in jobs).
 
@@ -26,7 +25,7 @@ triangulator.Run();
 var status = triangulator.Output.Status.Value;
 ```
 
-> [!WARNING]  
+> [!WARNING]
 > Input validation can be expensive. If you are certain of your input, consider disabling this option for additional performance.
 
 [validate]: xref:andywiecko.BurstTriangulator.TriangulationSettings.ValidateInput
