@@ -542,7 +542,6 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 {
                     var err = EdgePositionsRangeValidation(i);
                     if (!err.IsError) err = EdgeValidation(i);
-                    if (!err.IsError) err = EdgePointValidation(i);
                     if (!err.IsError) err = EdgeEdgeValidation(i);
 
                     if (err.IsError) {
@@ -590,28 +589,6 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 return Status.Ok;
             }
 
-            private Status EdgePointValidation(int i)
-            {
-                var (a0Id, a1Id) = (constraints[2 * i], constraints[2 * i + 1]);
-                var (a0, a1) = (positions[a0Id], positions[a1Id]);
-
-                for (int j = 0; j < positions.Length; j++)
-                {
-                    if (j == a0Id || j == a1Id)
-                    {
-                        continue;
-                    }
-
-                    var p = positions[j];
-                    if (PointLineSegmentIntersection(p, a0, a1))
-                    {
-                        return Status.PositionOnConstraint(j, new int2(a0Id, a1Id));
-                    }
-                }
-
-                return Status.Ok;
-            }
-
             private Status EdgeEdgeValidation(int i)
             {
                 for (int j = i + 1; j < constraints.Length / 2; j++)
@@ -635,14 +612,15 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     return Status.DuplicateConstraint(i, j);
                 }
 
-                // One common point, cases should be filtered out at EdgePointValidation
+                // One common vertex
                 if (a0Id == b0Id || a0Id == b1Id || a1Id == b0Id || a1Id == b1Id)
                 {
                     return Status.Ok;
                 }
 
                 var (a0, a1, b0, b1) = (positions[a0Id], positions[a1Id], positions[b0Id], positions[b1Id]);
-                if (EdgeEdgeIntersection(a0, a1, b0, b1))
+                // Check if the two constraints intersect, but ignore if they only overlap at endpoints
+                if (EdgeEdgeIntersection(a0, a1, b0, b1) && !(PointLineSegmentIntersection(a0, b0, b1) || PointLineSegmentIntersection(a1, b0, b1) || PointLineSegmentIntersection(b0, a0, a1) || PointLineSegmentIntersection(b1, a0, a1)))
                 {
                     return Status.ConstraintIntersection(i, j);
                 }
@@ -1044,6 +1022,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private NativeArray<T2>.ReadOnly positions;
             private NativeArray<int> triangles;
             private NativeArray<int>.ReadOnly inputConstraintEdges;
+            /// <summary>
+            /// There are 3 halfedges per triangle. For a triangle ABC, the halfedges are A->B, B->C, and C->A.
+            ///
+            /// For each halfedge index, the value is the index of the opposite halfedge in the adjacent triangle,
+            /// or -1 if the halfedge is on the convex hull of the triangulation.
+            /// </summary>
             // NOTE: `halfedges` and `constrainedHalfedges` can be NativeArray, however, Job system can throw here the exception:
             //
             // ```
@@ -1058,6 +1042,11 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             private NativeList<int> intersections;
             private NativeList<int> unresolvedIntersections;
+
+            /// <summary>
+            /// Maps vertex indices to halfedge indices.
+            /// If a vertex is part of multiple halfedges, an arbitrary representative halfedge is stored.
+            /// </summary>
             private NativeArray<int> pointToHalfedge;
 
             public ConstrainEdgesStep(InputData<T2> input, OutputData<T2> output, Args args)
@@ -1103,26 +1092,6 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     c = c.x < c.y ? c.xy : c.yx; // Backward compatibility. To remove in the future.
                     TryApplyConstraint(c);
                 }
-            }
-
-            private void TryApplyConstraint(int2 c)
-            {
-                intersections.Clear();
-                unresolvedIntersections.Clear();
-
-                CollectIntersections(c);
-
-                var iter = 0;
-                do
-                {
-                    if (status.Value.IsError)
-                    {
-                        return;
-                    }
-
-                    (intersections, unresolvedIntersections) = (unresolvedIntersections, intersections);
-                    TryResolveIntersections(c, ref iter);
-                } while (!unresolvedIntersections.IsEmpty);
             }
 
             private void TryResolveIntersections(int2 c, ref int iter)
@@ -1266,8 +1235,31 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 return !(math.any(e1.xy == e2.xy | e1.xy == e2.yx)) && UnsafeTriangulator<T, T2, TBig, TTransform, TUtils>.EdgeEdgeIntersection(a0, a1, b0, b1);
             }
 
-            private void CollectIntersections(int2 edge)
+            void MarkHalfedgeConstrained(int halfedge)
             {
+                constrainedHalfedges[halfedge] = true;
+                var oh = halfedges[halfedge];
+                if (oh != -1)
+                {
+                    constrainedHalfedges[oh] = true;
+                }
+            }
+
+            private void TryApplyConstraint(int2 edge)
+            {
+                intersections.Clear();
+                unresolvedIntersections.Clear();
+
+                // We start at the vertex ci=edge.x,
+                // then we walk in a straight line through the triangulated mesh
+                // until we reach the vertex cj=edge.y.
+                // Along the way, we collect all halfedges that intersect with the edge ci-cj
+                // and add them as unresolved intersections.
+                //
+                // If we find a vertex k (not ci or cj) that lies exactly on the edge ci-cj,
+                // then the constraint cannot be satisfied as is, and we instead split the
+                // constraint into two: ci-k and k-cj. This can happen multiple times.
+
                 // 1. Check if h1 is cj
                 // 2. Check if h1-h2 intersects with ci-cj
                 // 3. After each iteration: h0 <- h0'
@@ -1291,16 +1283,25 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     var h1 = NextHalfedge(h0);
                     if (triangles[h1] == cj)
                     {
-                        constrainedHalfedges[h0] = true;
-                        var oh0 = halfedges[h0];
-                        if (oh0 != -1)
-                        {
-                            constrainedHalfedges[oh0] = true;
-                        }
+                        MarkHalfedgeConstrained(h0);
                         break;
                     }
                     var h2 = NextHalfedge(h1);
-                    if (EdgeEdgeIntersection(edge, new(triangles[h1], triangles[h2])))
+
+                    if (PointLineSegmentIntersection(positions[triangles[h1]], positions[ci], positions[cj])) {
+                        // h1 lies on the edge ci-cj, split the constraint
+                        // Note: h1 and h2 cannot both lie on the constraint, since that would mean that the triangle h0,h1,h2 is degenerate
+                        MarkHalfedgeConstrained(h0);
+                        cj = triangles[h1];
+                        break;
+                    }
+                    if (PointLineSegmentIntersection(positions[triangles[h2]], positions[ci], positions[cj]) && triangles[h2] != cj) {
+                        // h2 lies on the edge ci-cj, split the constraint
+                        MarkHalfedgeConstrained(h2);
+                        cj = triangles[h2];
+                        break;
+                    }
+                    if (EdgeEdgeIntersection(new int2(ci, cj), new(triangles[h1], triangles[h2])))
                     {
                         unresolvedIntersections.Add(h1);
                         tunnelInit = halfedges[h1];
@@ -1332,16 +1333,24 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                         var h1 = NextHalfedge(h0);
                         if (triangles[h1] == cj)
                         {
-                            constrainedHalfedges[h0] = true;
-                            var oh0 = halfedges[h0];
-                            if (oh0 != -1)
-                            {
-                                constrainedHalfedges[oh0] = true;
-                            }
+                            MarkHalfedgeConstrained(h0);
                             break;
                         }
                         var h2 = NextHalfedge(h1);
-                        if (EdgeEdgeIntersection(edge, new(triangles[h1], triangles[h2])))
+
+                        if (PointLineSegmentIntersection(positions[triangles[h1]], positions[ci], positions[cj])) {
+                            // h1 lies on the edge ci-cj, split the constraint
+                            MarkHalfedgeConstrained(h0);
+                            cj = triangles[h1];
+                            break;
+                        }
+                        if (PointLineSegmentIntersection(positions[triangles[h2]], positions[ci], positions[cj]) && triangles[h2] != cj) {
+                            // h2 lies on the edge ci-cj, split the constraint
+                            MarkHalfedgeConstrained(h2);
+                            cj = triangles[h2];
+                            break;
+                        }
+                        if (EdgeEdgeIntersection(new int2(ci, cj), new(triangles[h1], triangles[h2])))
                         {
                             unresolvedIntersections.Add(h1);
                             tunnelInit = halfedges[h1];
@@ -1359,6 +1368,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 }
 
                 // Tunnel algorithm
+                // At this point we know that the segment ci->cj enters the triangle h0-h1-h2 via the edge h0-h1.
+                // In each iteration we have three options:
+                // * The segment ci-cj exits the triangle via one of its other edges,
+                //   in which case we follow to a the next triangle,
+                // * h2 is cj, in which case we are done.
+                // * h2 lies on the segment ci-cj, in which case we split the constraint as above.
                 //
                 // h2'
                 //  ^'.
@@ -1385,16 +1400,39 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     {
                         break;
                     }
-                    else if (EdgeEdgeIntersection(edge, new(triangles[h1p], triangles[h2p])))
+                    if (PointLineSegmentIntersection(positions[triangles[h2p]], positions[ci], positions[cj]))
+                    {
+                        cj = triangles[h2p];
+                        break;
+                    }
+                    else if (EdgeEdgeIntersection(new int2(ci, cj), new(triangles[h1p], triangles[h2p])))
                     {
                         unresolvedIntersections.Add(h1p);
                         tunnelInit = halfedges[h1p];
                     }
-                    else if (EdgeEdgeIntersection(edge, new(triangles[h2p], triangles[h0p])))
+                    else if (EdgeEdgeIntersection(new int2(ci, cj), new(triangles[h2p], triangles[h0p])))
                     {
                         unresolvedIntersections.Add(h2p);
                         tunnelInit = halfedges[h2p];
                     }
+                }
+
+                var iter = 0;
+                do
+                {
+                    if (status.Value.IsError)
+                    {
+                        return;
+                    }
+
+                    (intersections, unresolvedIntersections) = (unresolvedIntersections, intersections);
+                    TryResolveIntersections(new int2(ci, cj), ref iter);
+                } while (!unresolvedIntersections.IsEmpty);
+
+                // If the constraint was split, continue with the remaining part
+                if (edge.y != cj)
+                {
+                    TryApplyConstraint(new int2(cj, edge.y));
                 }
             }
 

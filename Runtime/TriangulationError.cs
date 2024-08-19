@@ -21,7 +21,6 @@ namespace andywiecko.BurstTriangulator
         public static Status DuplicateConstraint(int index1, int index2) => new Status { value1 = index1, value2 = index2, type = TriangulatorErrorType.DuplicateConstraint };
         public static Status ConstraintOutOfBounds(int index, int2 constraint, int positionLength) => new Status { value1 = index, value2 = constraint.x, value3 = constraint.y, value4 = positionLength, type = TriangulatorErrorType.ConstraintOutOfBounds };
         public static Status ConstraintSelfLoop(int index, int2 constraint) => new Status { value1 = index, value2 = constraint.x, value3 = constraint.y, type = TriangulatorErrorType.ConstraintSelfLoop };
-        public static Status PositionOnConstraint(int index, int2 constraint) => new Status { value1 = index, value2 = constraint.x, value3 = constraint.y, type = TriangulatorErrorType.PositionOnConstraint };
         public static Status ConstraintIntersection(int index1, int index2) => new Status { value1 = index1, value2 = index2, type = TriangulatorErrorType.ConstraintIntersection };
         public static Status DegenerateInput => new Status { type = TriangulatorErrorType.DegenerateInput };
         public static Status SloanMaxItersExceeded => new Status { type = TriangulatorErrorType.SloanMaxItersExceeded };
@@ -46,8 +45,6 @@ namespace andywiecko.BurstTriangulator
                     return $"Constraint[{value1}] = ({value2}, {value3}) is out of bounds of the positions array (length={value4}).";
                 case TriangulatorErrorType.ConstraintSelfLoop:
                     return $"Constraint[{value1}] = ({value2}, {value3}) is a self-loop.";
-                case TriangulatorErrorType.PositionOnConstraint:
-                    return $"Position at index {value1} lies on the segment formed by the constraint ({value2}, {value3}), but is not one of its endpoints.";
                 case TriangulatorErrorType.ConstraintIntersection:
                     return $"Constraints at indices {value1} and {value2} intersect.";
                 case TriangulatorErrorType.DegenerateInput:
@@ -78,7 +75,6 @@ namespace andywiecko.BurstTriangulator
         DuplicateConstraint,
         ConstraintOutOfBounds,
         ConstraintSelfLoop,
-        PositionOnConstraint,
         ConstraintIntersection,
         DegenerateInput,
         SloanMaxItersExceeded,
