@@ -22,7 +22,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             using var triangulator = new Triangulator<int2>(Allocator.Persistent)
             {
                 Input = { Positions = positions, ConstraintEdges = constraints, HoleSeeds = holes },
-                Settings = { AutoHolesAndBoundary = false, RefineMesh = true, RestoreBoundary = true, Preprocessor = Preprocessor.None }
+                Settings = { AutoHolesAndBoundary = false, RefineMesh = true, RestoreBoundary = true, Preprocessor = Preprocessor.None, Verbose = false }
             };
 
             triangulator.Run();
