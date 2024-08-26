@@ -824,8 +824,6 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
                 var n = positions.Length;
                 var maxTriangles = math.max(2 * n - 5, 0);
-                // Note: The triangle and halfedges lists may contain uninitialized data after changing their lengths.
-                // We must be sure to only access triangle and halfedge indices lower than #trianglesLen.
                 triangles.Length = 3 * maxTriangles;
                 halfedges.Length = 3 * maxTriangles;
 
