@@ -608,9 +608,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
         private void PostProcessInputStep(OutputData<T2> output, Args args, TTransform lt)
         {
-            using var _ = MarkerPostProcessInputStep.Auto();
             if (args.Preprocessor != Preprocessor.None)
             {
+                using var _ = MarkerPostProcessInputStep.Auto();
                 var inverse = lt.Inverse();
                 for (int i = 0; i < output.Positions.Length; i++)
                 {
