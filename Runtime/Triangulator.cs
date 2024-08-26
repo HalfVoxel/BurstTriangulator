@@ -1805,12 +1805,14 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                         ohe = NextHalfedge(ohe);
                         if (!heVisited[ohe])
                         {
+                            heVisited[ohe] = true;
                             heQueue.Enqueue(ohe);
                         }
 
                         ohe = NextHalfedge(ohe);
                         if (!heVisited[ohe])
                         {
+                            heVisited[ohe] = true;
                             heQueue.Enqueue(ohe);
                         }
                     }
