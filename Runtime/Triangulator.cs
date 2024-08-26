@@ -638,12 +638,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public void Execute()
             {
-                using var _ = MarkerValidateInputStep.Auto();
-
                 if (!args.ValidateInput)
                 {
                     return;
                 }
+
+                using var _ = MarkerValidateInputStep.Auto();
 
                 if (positions.Length < 3)
                 {
