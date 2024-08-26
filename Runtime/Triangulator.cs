@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -114,6 +115,8 @@ namespace andywiecko.BurstTriangulator
     /// <summary>
     /// Allocation free input class with implicit cast to <see cref="InputData{T2}"/>.
     /// </summary>
+    /// <exclude />
+    [Obsolete("Use AsNativeArray(out Handle) instead! You can learn more in the project manual.")]
     public class ManagedInput<T2> where T2 : unmanaged
     {
         public T2[] Positions { get; set; }
@@ -137,6 +140,29 @@ namespace andywiecko.BurstTriangulator
         public NativeList<bool> ConstrainedHalfedges => owner.constrainedHalfedges;
         private readonly Triangulator<T2> owner;
         public OutputData(Triangulator<T2> owner) => this.owner = owner;
+    }
+
+    /// <summary>
+    /// A handle that prevents an object from being deallocated by the garbage collector (GC).
+    /// Call <see cref="Free"/> to release the object.
+    /// </summary>
+    /// <seealso cref="Extensions.AsNativeArray{T}(T[], out Handle)"/>
+    public readonly struct Handle
+    {
+        private readonly ulong gcHandle;
+        /// <summary>
+        /// Creates a <see cref="Handle"/>.
+        /// </summary>
+        /// <param name="gcHandle">The handle value, which can be obtained e.g. from
+        /// <see cref="UnsafeUtility.PinGCArrayAndGetDataAddress(Array, out ulong)"/> or
+        /// <see cref="UnsafeUtility.PinGCObjectAndGetAddress(object, out ulong)"/>.
+        /// </param>
+        /// <seealso cref="Extensions.AsNativeArray{T}(T[], out Handle)"/>
+        public Handle(ulong gcHandle) => this.gcHandle = gcHandle;
+        /// <summary>
+        /// Releases the handle, allowing the object to be collected by the garbage collector.
+        /// </summary>
+        public readonly void Free() => UnsafeUtility.ReleaseGCObject(gcHandle);
     }
 
     public class Triangulator : IDisposable
@@ -210,6 +236,8 @@ namespace andywiecko.BurstTriangulator
         /// <typeparam name="T">The type of the elements.</typeparam>
         /// <param name="array">Array to </param>
         /// <returns>View on managed <paramref name="array"/> with <see cref="NativeArray{T}"/>.</returns>
+        /// <exclude />
+        [Obsolete("Use AsNativeArray(out Handle) instead! You can learn more in the project manual.")]
         unsafe public static NativeArray<T> AsNativeArray<T>(this T[] array) where T : unmanaged
         {
             var ret = default(NativeArray<T>);
@@ -225,10 +253,46 @@ namespace andywiecko.BurstTriangulator
             return ret;
         }
 
+        /// <summary>
+        /// Returns <see cref="NativeArray{T}"/> view on managed <paramref name="array"/>
+        /// with <paramref name="handle"/> to prevents from deallocation.
+        /// <para/>
+        /// <b>Warning!</b> User has to call <see cref="Handle.Free"/>
+        /// manually to release the data for GC! Read more in the project manual.
+        /// </summary>
+        /// <typeparam name="T">The type of the elements.</typeparam>
+        /// <param name="array">Array to view.</param>
+        /// <param name="handle">A handle that prevents the <paramref name="array"/> from being deallocated by the GC.</param>
+        /// <returns><see cref="NativeArray{T}"/> view on managed <paramref name="array"/> with <see cref="NativeArray{T}"/>.</returns>
+        public static unsafe NativeArray<T> AsNativeArray<T>(this T[] array, out Handle handle) where T : unmanaged
+        {
+            var ptr = UnsafeUtility.PinGCArrayAndGetDataAddress(array, out var gcHandle);
+            var ret = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>(ptr, array.Length, Allocator.None);
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+            var m_SafetyHandle = AtomicSafetyHandle.Create();
+            NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref ret, m_SafetyHandle);
+#endif
+            handle = new(gcHandle);
+            return ret;
+        }
+
         public static void Run(this Triangulator<float2> @this) =>
             new TriangulationJob<float, float2, float, AffineTransform32, FloatUtils>(@this).Run();
         public static JobHandle Schedule(this Triangulator<float2> @this, JobHandle dependencies = default) =>
             new TriangulationJob<float, float2, float, AffineTransform32, FloatUtils>(@this).Schedule(dependencies);
+
+        public static void Run(this Triangulator<Vector2> @this) =>
+            new TriangulationJob<float, float2, float, AffineTransform32, FloatUtils>(
+                input: new() { Positions = @this.Input.Positions.Reinterpret<float2>(), ConstraintEdges = @this.Input.ConstraintEdges, HoleSeeds = @this.Input.HoleSeeds.Reinterpret<float2>() },
+                output: new() { Triangles = @this.triangles, Halfedges = @this.halfedges, Positions = UnsafeUtility.As<NativeList<Vector2>, NativeList<float2>>(ref @this.outputPositions), Status = @this.status, ConstrainedHalfedges = @this.constrainedHalfedges },
+                args: @this.Settings
+        ).Run();
+        public static JobHandle Schedule(this Triangulator<Vector2> @this, JobHandle dependencies = default) =>
+            new TriangulationJob<float, float2, float, AffineTransform32, FloatUtils>(
+                input: new() { Positions = @this.Input.Positions.Reinterpret<float2>(), ConstraintEdges = @this.Input.ConstraintEdges, HoleSeeds = @this.Input.HoleSeeds.Reinterpret<float2>() },
+                output: new() { Triangles = @this.triangles, Halfedges = @this.halfedges, Positions = UnsafeUtility.As<NativeList<Vector2>, NativeList<float2>>(ref @this.outputPositions), Status = @this.status, ConstrainedHalfedges = @this.constrainedHalfedges },
+                args: @this.Settings
+        ).Schedule(dependencies);
 
         public static void Run(this Triangulator<double2> @this) =>
             new TriangulationJob<double, double2, double, AffineTransform64, DoubleUtils>(@this).Run();
@@ -264,6 +328,10 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
     {
         public readonly Preprocessor Preprocessor;
         public readonly int SloanMaxIters;
+        // NOTE: Only blittable types are supported for Burst compiled static methods.
+        //       Unfortunately bool type is non-blittable and required marshaling for compilation.
+        //       Learn more about blittable here: https://learn.microsoft.com/en-us/dotnet/framework/interop/blittable-and-non-blittable-types
+        [MarshalAs(UnmanagedType.U1)]
         public readonly bool AutoHolesAndBoundary, RefineMesh, RestoreBoundary, ValidateInput, Verbose;
         public readonly float RefinementThresholdAngle, RefinementThresholdArea;
 
@@ -322,25 +390,50 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         );
     }
 
+    /// <summary>
+    /// A wrapper for <see cref="UnsafeTriangulator{T2}"/> where T2 is <see cref="double2"/>.
+    /// </summary>
     public readonly struct UnsafeTriangulator { }
+
+    /// <summary>
+    /// A readonly struct that corresponds to <see cref="Triangulator{T2}"/>.
+    /// This struct can be used directly in a native context within the jobs pipeline.
+    /// The API is accessible through <see cref="Extensions"/>.
+    /// </summary>
+    /// <remarks>
+    /// <i>Unsafe</i> in this context indicates that using the method may be challenging for beginner users.
+    /// The user is responsible for managing data allocation (both input and output).
+    /// Some permutations of the method calls may not be supported.
+    /// Refer to the documentation for more details. The term <i>unsafe</i> does <b>not</b> refer to memory safety.
+    /// </remarks>
+    /// <typeparam name="T2">The coordinate type. Supported types include:
+    /// <see cref="float2"/>,
+    /// <see cref="Vector2"/>,
+    /// <see cref="double2"/>,
+    /// and
+    /// <see cref="int2"/>.
+    /// For more information on type restrictions, refer to the documentation.
+    /// </typeparam>
+    /// <seealso cref="Extensions"/>
     public readonly struct UnsafeTriangulator<T2> where T2 : unmanaged { }
 
     public static class Extensions
     {
         public static void Triangulate(this UnsafeTriangulator @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().Triangulate(input, output, args, allocator);
         public static void PlantHoleSeeds(this UnsafeTriangulator @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().PlantHoleSeeds(input, output, args, allocator);
-        public static void RefineMesh(this UnsafeTriangulator @this, OutputData<double2> output, Allocator allocator, double areaThreshold = 1, double angleThreshold = 0.0872664626, bool constrainBoundary = false) =>
-            new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
+        public static void RefineMesh(this UnsafeTriangulator @this, OutputData<double2> output, Allocator allocator, double areaThreshold = 1, double angleThreshold = 0.0872664626, bool constrainBoundary = false) => new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
 
         public static void Triangulate(this UnsafeTriangulator<float2> @this, InputData<float2> input, OutputData<float2> output, Args args, Allocator allocator) => new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().Triangulate(input, output, args, allocator);
         public static void PlantHoleSeeds(this UnsafeTriangulator<float2> @this, InputData<float2> input, OutputData<float2> output, Args args, Allocator allocator) => new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().PlantHoleSeeds(input, output, args, allocator);
-        public static void RefineMesh(this UnsafeTriangulator<float2> @this, OutputData<float2> output, Allocator allocator, float areaThreshold = 1, float angleThreshold = 0.0872664626f, bool constrainBoundary = false) =>
-            new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
+        public static void RefineMesh(this UnsafeTriangulator<float2> @this, OutputData<float2> output, Allocator allocator, float areaThreshold = 1, float angleThreshold = 0.0872664626f, bool constrainBoundary = false) => new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
+
+        public static void Triangulate(this UnsafeTriangulator<Vector2> @this, InputData<Vector2> input, OutputData<Vector2> output, Args args, Allocator allocator) => new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().Triangulate(UnsafeUtility.As<InputData<Vector2>, InputData<float2>>(ref input), UnsafeUtility.As<OutputData<Vector2>, OutputData<float2>>(ref output), args, allocator);
+        public static void PlantHoleSeeds(this UnsafeTriangulator<Vector2> @this, InputData<Vector2> input, OutputData<Vector2> output, Args args, Allocator allocator) => new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().PlantHoleSeeds(UnsafeUtility.As<InputData<Vector2>, InputData<float2>>(ref input), UnsafeUtility.As<OutputData<Vector2>, OutputData<float2>>(ref output), args, allocator);
+        public static void RefineMesh(this UnsafeTriangulator<Vector2> @this, OutputData<Vector2> output, Allocator allocator, float areaThreshold = 1, float angleThreshold = 0.0872664626f, bool constrainBoundary = false) => new UnsafeTriangulator<float, float2, float, AffineTransform32, FloatUtils>().RefineMesh(UnsafeUtility.As<OutputData<Vector2>, OutputData<float2>>(ref output), allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
 
         public static void Triangulate(this UnsafeTriangulator<double2> @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().Triangulate(input, output, args, allocator);
         public static void PlantHoleSeeds(this UnsafeTriangulator<double2> @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().PlantHoleSeeds(input, output, args, allocator);
-        public static void RefineMesh(this UnsafeTriangulator<double2> @this, OutputData<double2> output, Allocator allocator, double areaThreshold = 1, double angleThreshold = 0.0872664626, bool constrainBoundary = false) =>
-            new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
+        public static void RefineMesh(this UnsafeTriangulator<double2> @this, OutputData<double2> output, Allocator allocator, double areaThreshold = 1, double angleThreshold = 0.0872664626, bool constrainBoundary = false) => new UnsafeTriangulator<double, double2, double, AffineTransform64, DoubleUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
 
         public static void Triangulate(this UnsafeTriangulator<int2> @this, InputData<int2> input, OutputData<int2> output, Args args, Allocator allocator) => new UnsafeTriangulator<int, int2, long, TranslationInt, IntUtils>().Triangulate(input, output, args, allocator);
         public static void PlantHoleSeeds(this UnsafeTriangulator<int2> @this, InputData<int2> input, OutputData<int2> output, Args args, Allocator allocator) => new UnsafeTriangulator<int, int2, long, TranslationInt, IntUtils>().PlantHoleSeeds(input, output, args, allocator);
@@ -367,6 +460,21 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         private NativeReference<Status> status;
 
         private readonly Args args;
+
+        public TriangulationJob(InputData<T2> input, OutputData<T2> output, Args args)
+        {
+            inputPositions = input.Positions;
+            constraints = input.ConstraintEdges;
+            holeSeeds = input.HoleSeeds;
+
+            outputPositions = output.Positions;
+            triangles = output.Triangles;
+            halfedges = output.Halfedges;
+            constrainedHalfedges = output.ConstrainedHalfedges;
+            status = output.Status;
+
+            this.args = args;
+        }
 
         public TriangulationJob(Triangulator<T2> @this)
         {
@@ -676,8 +784,6 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private readonly bool verbose;
             private int hullStart;
             private int trianglesLen;
-
-
 
             public DelaunayTriangulationStep(OutputData<T2> output, Args args)
             {
@@ -2473,7 +2579,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         /// </summary>
         /// <remarks>
         /// This method will not catch intersecting collinear segments. See unit tests for more details.
-        /// Segments intersecting only at their endpoints may or may not return true, depending on their orientation.
+        /// Segments intersecting only at their endpoints may or may not return <see langword="true"/>, depending on their orientation.
         /// </remarks>
         internal static bool EdgeEdgeIntersection(T2 a0, T2 a1, T2 b0, T2 b1) => ccw(a0, a1, b0) != ccw(a0, a1, b1) && ccw(b0, b1, a0) != ccw(b0, b1, a1);
 
@@ -2750,8 +2856,8 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
     internal interface IUtils<T, T2, TBig> where T : unmanaged where T2 : unmanaged where TBig : unmanaged
     {
         /// <summary>
-        /// Cast a float to T. Note that for integer coordinates, this will be floored.
-        /// <b>Warning!</b> This operation may cause precission loss, use with caution.
+        /// Cast a float to <typeparamref name="T"/>. Note that for integer coordinates, this will be floored.
+        /// <b>Warning!</b> This operation may cause precision loss, use with caution.
         /// </summary>
         T Cast(TBig v);
         T2 CircumCenter(T2 a, T2 b, T2 c);
@@ -3010,15 +3116,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             var cl = (long)e.x * e.x + (long)e.y * e.y;
 
             var div = (long)d.x * e.y - (long)d.y * e.x;
-
-            // If the triangle is degenerate (just a line), then we should return a point at infinity,
-            // because the circumcenter is not well-defined for this case.
-            // Integers do not have infinites, but we can use the maximum value as a substitute.
-            if (div == 0) return new(int.MaxValue);
-
-            // Note: Doubles can represent all integers up to 2^53 exactly,
-            // so they can represent all int32 coordinates, and thus it is safe to cast here.
-            return (int2)math.round(a + (0.5 / div) * (bl * math.double2(e.y, -e.x) + cl * math.double2(-d.y, d.x)));
+            // NOTE: In a case when div = 0 (i.e. circumcenter is not well defined) we use int.MaxValue to mimic the infinity.
+            //       Doubles can represent all integers up to 2^53 exactly, so they can represent all int32 coordinates, and thus it is safe to cast here.
+            return div == 0 ? new(int.MaxValue) : (int2)math.round(a + (0.5 / div) * (bl * math.double2(e.y, -e.x) + cl * math.double2(-d.y, d.x)));
         }
 
         public readonly int Const(float v) => (int)v;

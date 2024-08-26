@@ -6,6 +6,7 @@ using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
+using UnityEngine;
 using UnityEngine.TestTools;
 
 namespace andywiecko.BurstTriangulator.Editor.Tests
@@ -32,6 +33,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
     }
 
     [TestFixture(typeof(float2))]
+    [TestFixture(typeof(Vector2))]
     [TestFixture(typeof(double2))]
     [TestFixture(typeof(int2))]
     public class TriangulatorGenericsEditorTests<T> where T : unmanaged
@@ -125,7 +127,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 Input = { Positions = positions },
             };
 
-            LogAssert.Expect(UnityEngine.LogType.Error, new Regex(".*"));
+            LogAssert.Expect(LogType.Error, new Regex(".*"));
             triangulator.Run();
 
             return triangulator.Output.Status.Value;
@@ -257,7 +259,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 }
             };
 
-            LogAssert.Expect(UnityEngine.LogType.Error, new Regex(".*"));
+            LogAssert.Expect(LogType.Error, new Regex(".*"));
             triangulator.Run();
 
             return triangulator.Output.Status.Value;
@@ -288,59 +290,6 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             triangulator.Run();
 
             return triangulator.Output.Status.Value;
-        }
-
-        [Test]
-        public void DelaunayTriangulationWithRefinementTest()
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("Mesh refinement is not supported for int2.");
-            }
-
-            ///  3 ------- 2
-            ///  |         |
-            ///  |         |
-            ///  |         |
-            ///  0 ------- 1
-            using var positions = new NativeArray<T>(new[]
-            {
-                math.float2(0, 0),
-                math.float2(1, 0),
-                math.float2(1, 1),
-                math.float2(0, 1)
-            }.DynamicCast<T>(), Allocator.Persistent);
-
-            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
-            {
-                Settings =
-                {
-                    RefineMesh = true,
-                    RefinementThresholds = { Area = 0.3f, Angle = math.radians(20f) }
-                },
-                Input = { Positions = positions },
-            };
-
-            triangulator.Run();
-
-            var expectedPositions = new[]
-            {
-                math.float2(0, 0),
-                math.float2(1, 0),
-                math.float2(1, 1),
-                math.float2(0, 1),
-                math.float2(1, 0.5f),
-                math.float2(0, 0.5f),
-            }.DynamicCast<T>();
-            var expectedTriangles = new[]
-            {
-                5, 1, 0,
-                5, 2, 4,
-                5, 3, 2,
-                5, 4, 1,
-            };
-            Assert.That(triangulator.Output.Positions.AsArray(), Is.EqualTo(expectedPositions));
-            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expectedTriangles).Using(TrianglesComparer.Instance));
         }
 
         private static readonly TestCaseData[] edgeConstraintsTestData =
@@ -922,176 +871,6 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expected).Using(TrianglesComparer.Instance));
         }
 
-        private static readonly TestCaseData[] constraintDelaunayTriangulationWithRefinementTestData =
-        {
-            //  3 -------- 2
-            //  | ' .      |
-            //  |    ' .   |
-            //  |       ' .|
-            //  0 -------- 1
-            new((
-                new []
-                {
-                    math.float2(0, 0),
-                    math.float2(1, 0),
-                    math.float2(1, 1),
-                    math.float2(0, 1)
-                },
-                new []
-                {
-                    0, 1,
-                    1, 2,
-                    2, 3,
-                    3, 0,
-                    0, 2
-                },
-                new []
-                {
-                    math.float2(0.5f, 0.5f),
-                    math.float2(1f, 0.5f),
-                    math.float2(0.5f, 0f),
-                    math.float2(0f, 0.5f),
-                    math.float2(0.8189806f, 0.8189806f),
-                    math.float2(0.1810194f, 0.1810194f),
-                    math.float2(0.5f, 1f),
-                    math.float2(0.256f, 0f),
-                    math.float2(0f, 0.256f),
-                    math.float2(0.744f, 1f),
-                },
-                new []
-                {
-                    6, 4, 5,
-                    6, 5, 1,
-                    8, 2, 5,
-                    8, 5, 4,
-                    9, 4, 6,
-                    9, 7, 4,
-                    10, 4, 7,
-                    10, 7, 3,
-                    10, 8, 4,
-                    11, 0, 9,
-                    11, 9, 6,
-                    12, 7, 9,
-                    12, 9, 0,
-                    13, 2, 8,
-                    13, 8, 10,
-                }
-            )){ TestName = "Test case 1 (square)" },
-
-            //  5 -------- 4 -------- 3
-            //  |       . '|      . ' |
-            //  |    . '   |   . '    |
-            //  |. '      .|. '       |
-            //  0 -------- 1 -------- 2
-            new((
-                new []
-                {
-                    math.float2(0, 0),
-                    math.float2(1, 0),
-                    math.float2(2, 0),
-                    math.float2(2, 1),
-                    math.float2(1, 1),
-                    math.float2(0, 1),
-                },
-                new []
-                {
-                    0, 1,
-                    1, 2,
-                    2, 3,
-                    3, 4,
-                    4, 5,
-                    5, 0,
-                    0, 3
-                },
-                new []
-                {
-                    math.float2(1f, 0.5f),
-                    math.float2(0.4579467f, 0.2289734f),
-                    math.float2(1.542053f, 0.7710266f),
-                    math.float2(0.5f, 0f),
-                    math.float2(1.5f, 1f),
-                },
-                new []
-                {
-                    7, 0, 5,
-                    7, 4, 6,
-                    7, 5, 4,
-                    7, 6, 1,
-                    8, 1, 6,
-                    8, 2, 1,
-                    8, 3, 2,
-                    8, 6, 4,
-                    9, 0, 7,
-                    9, 7, 1,
-                    10, 3, 8,
-                    10, 8, 4,
-                }
-            )){ TestName = "Test case 2 (rectangle)" },
-            new((
-                managedPositions: new[]
-                {
-                    math.float2(0, 0),
-                    math.float2(1, 0),
-                    math.float2(1, 1),
-                    math.float2(0.75f, 0.75f),
-                    math.float2(0, 1),
-                },
-                constraints: new[]
-                {
-                    0, 1,
-                    1, 2,
-                    2, 3,
-                    3, 4,
-                    4, 0,
-                },
-                insertedPoints: new[]
-                {
-                    math.float2(1f, 0.5f),
-                    math.float2(1f, 0.744f),
-                },
-                triangles: new[]
-                {
-                    0, 4, 3,
-                    5, 0, 3,
-                    5, 1, 0,
-                    6, 3, 2,
-                    6, 5, 3,
-                }
-            )){ TestName = "Test case 3 (strange box)" },
-        };
-
-        [Test, TestCaseSource(nameof(constraintDelaunayTriangulationWithRefinementTestData))]
-        public void ConstraintDelaunayTriangulationWithRefinementTest((float2[] managedPositions, int[] constraints, float2[] insertedPoints, int[] triangles) input)
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("Mesh refinement is not supported for int2.");
-            }
-
-            using var positions = new NativeArray<T>(input.managedPositions.DynamicCast<T>(), Allocator.Persistent);
-            using var constraintEdges = new NativeArray<int>(input.constraints, Allocator.Persistent);
-            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
-            {
-                Settings =
-                {
-                    RefineMesh = true,
-                    RestoreBoundary = true,
-                    RefinementThresholds = { Area = 10.3f, Angle = 0 },
-                },
-                Input =
-                {
-                    Positions = positions,
-                    ConstraintEdges = constraintEdges,
-                }
-            };
-
-            triangulator.Run();
-
-            var expected = input.managedPositions.Union(input.insertedPoints).DynamicCast<T>();
-            Assert.That(triangulator.Output.Positions.AsArray(), Is.EqualTo(expected).Using(TestExtensions.Comparer<T>()));
-            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(input.triangles).Using(TrianglesComparer.Instance));
-        }
-
         [Test]
         public void BoundaryReconstructionWithoutRefinementTest()
         {
@@ -1154,72 +933,6 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 5, 7, 6,
             };
             Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expected).Using(TrianglesComparer.Instance));
-        }
-
-        [Test]
-        public void BoundaryReconstructionWithRefinementTest()
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("Mesh refinement is not supported for int2.");
-            }
-
-            // 4.             .2
-            // | '.         .' |
-            // |   '.     .'   |
-            // |     '. .'     |
-            // |       3       |
-            // |               |
-            // 0 ------------- 1
-            var managedPositions = new[]
-            {
-                math.float2(0, 0),
-                math.float2(1, 0),
-                math.float2(1, 1),
-                math.float2(0.5f, 0.25f),
-                math.float2(0, 1),
-            };
-
-            var constraints = new[]
-            {
-                0, 1,
-                1, 2,
-                2, 3,
-                3, 4,
-                4, 0
-            };
-
-            using var positions = new NativeArray<T>(managedPositions.DynamicCast<T>(), Allocator.Persistent);
-            using var constraintEdges = new NativeArray<int>(constraints, Allocator.Persistent);
-            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
-            {
-                Settings =
-                {
-                    RefineMesh = true,
-                    RestoreBoundary = true,
-                    RefinementThresholds = { Area = 0.25f }
-                },
-                Input =
-                {
-                    Positions = positions,
-                    ConstraintEdges = constraintEdges,
-                }
-            };
-
-            triangulator.Run();
-
-            var expectedPositions = managedPositions.Union(
-                new[] { math.float2(0.5f, 0f) }
-            ).ToArray().DynamicCast<T>();
-            var expectedTriangles = new[]
-            {
-                2, 1, 3,
-                3, 0, 4,
-                5, 0, 3,
-                5, 3, 1,
-            };
-            Assert.That(triangulator.Output.Positions.AsArray(), Is.EqualTo(expectedPositions));
-            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expectedTriangles).Using(TrianglesComparer.Instance));
         }
 
         private static readonly TestCaseData[] triangulationWithHolesWithoutRefinementTestData =
@@ -1426,98 +1139,6 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expected).Using(TrianglesComparer.Instance));
         }
 
-        [Test]
-        public void TriangulationWithHolesWithRefinementTest()
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("Mesh refinement is not supported for int2.");
-            }
-
-            //   * --------------------- *
-            //   |                       |
-            //   |                       |
-            //   |       * ----- *       |
-            //   |       |   X   |       |
-            //   |       |       |       |
-            //   |       * ----- *       |
-            //   |                       |
-            //   |                       |
-            //   * --------------------- *
-            var managedPositions = new[]
-            {
-                math.float2(0, 0),
-                math.float2(3, 0),
-                math.float2(3, 3),
-                math.float2(0, 3),
-
-                math.float2(1, 1),
-                math.float2(2, 1),
-                math.float2(2, 2),
-                math.float2(1, 2),
-            }.DynamicCast<T>();
-
-            var constraints = new[]
-            {
-                0, 1,
-                1, 2,
-                2, 3,
-                3, 0,
-
-                4, 5,
-                5, 6,
-                6, 7,
-                7, 4
-            };
-
-            using var positions = new NativeArray<T>(managedPositions, Allocator.Persistent);
-            using var constraintEdges = new NativeArray<int>(constraints, Allocator.Persistent);
-            using var holes = new NativeArray<T>(new[] { (float2)1.5f }.DynamicCast<T>(), Allocator.Persistent);
-            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
-            {
-                Settings =
-                {
-                    RefineMesh = true,
-                    RestoreBoundary = true,
-                    RefinementThresholds = { Area = 1.0f },
-                },
-                Input =
-                {
-                    Positions = positions,
-                    ConstraintEdges = constraintEdges,
-                    HoleSeeds = holes,
-                }
-            };
-
-            triangulator.Run();
-
-            var expectedPositions = managedPositions.Union(new float2[]
-            {
-                math.float2(1.5f, 0f),
-                math.float2(3f, 1.5f),
-                math.float2(1.5f, 3f),
-                math.float2(0f, 1.5f),
-            }.DynamicCast<T>());
-            var expectedTriangles = new[]
-            {
-                8, 0, 4,
-                8, 4, 5,
-                8, 5, 1,
-                9, 1, 5,
-                9, 5, 6,
-                9, 6, 2,
-                10, 3, 7,
-                10, 4, 0,
-                10, 7, 4,
-                11, 2, 6,
-                11, 6, 7,
-                11, 7, 3,
-            };
-
-            Assert.That(triangulator.Output.Positions.AsArray(), Is.EquivalentTo(expectedPositions));
-            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expectedTriangles).Using(TrianglesComparer.Instance));
-        }
-
         //   * --------------------- *
         //   |                       |
         //   |                       |
@@ -1531,28 +1152,35 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
         private static readonly Type[] _ = { // Forced compilation
             typeof(TriangulatorGenericsEditorTests<float2>.DeferredArraySupportInputJobFloat2),
             typeof(TriangulatorGenericsEditorTests<double2>.DeferredArraySupportInputJobDouble2),
+            typeof(TriangulatorGenericsEditorTests<Vector2>.DeferredArraySupportInputJobVector2),
+            typeof(TriangulatorGenericsEditorTests<int2>.DeferredArraySupportInputJobInt2),
         };
 
         [BurstCompile]
         private struct DeferredArraySupportInputJobDouble2 : IJob
         {
-            public NativeList<double2> positions;
-            public NativeList<int> constraints;
-            public NativeList<double2> holes;
+            private NativeList<double2> positions;
+            private NativeList<int> constraints;
+            private NativeList<double2> holes;
+
+            public DeferredArraySupportInputJobDouble2(NativeList<T> positions, NativeList<int> constraints, NativeList<T> holes)
+            {
+                this.positions = (dynamic)positions;
+                this.constraints = constraints;
+                this.holes = (dynamic)holes;
+            }
 
             public void Execute()
             {
-                positions.Clear();
-                positions.Add(math.double2(0, 0));
-                positions.Add(math.double2(3, 0));
-                positions.Add(math.double2(3, 3));
-                positions.Add(math.double2(0, 3));
-                positions.Add(math.double2(1, 1));
-                positions.Add(math.double2(2, 1));
-                positions.Add(math.double2(2, 2));
-                positions.Add(math.double2(1, 2));
+                positions.Add(new(0, 0));
+                positions.Add(new(4, 0));
+                positions.Add(new(4, 4));
+                positions.Add(new(0, 4));
+                positions.Add(new(1, 1));
+                positions.Add(new(3, 1));
+                positions.Add(new(3, 3));
+                positions.Add(new(1, 3));
 
-                constraints.Clear();
                 constraints.Add(0); constraints.Add(1);
                 constraints.Add(1); constraints.Add(2);
                 constraints.Add(2); constraints.Add(3);
@@ -1562,31 +1190,35 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 constraints.Add(6); constraints.Add(7);
                 constraints.Add(7); constraints.Add(4);
 
-                holes.Clear();
-                holes.Add(1.5f);
+                holes.Add(new(2, 2));
             }
         }
 
         [BurstCompile]
         private struct DeferredArraySupportInputJobFloat2 : IJob
         {
-            public NativeList<float2> positions;
-            public NativeList<int> constraints;
-            public NativeList<float2> holes;
+            private NativeList<float2> positions;
+            private NativeList<int> constraints;
+            private NativeList<float2> holes;
+
+            public DeferredArraySupportInputJobFloat2(NativeList<T> positions, NativeList<int> constraints, NativeList<T> holes)
+            {
+                this.positions = (dynamic)positions;
+                this.constraints = constraints;
+                this.holes = (dynamic)holes;
+            }
 
             public void Execute()
             {
-                positions.Clear();
-                positions.Add(math.float2(0, 0));
-                positions.Add(math.float2(3, 0));
-                positions.Add(math.float2(3, 3));
-                positions.Add(math.float2(0, 3));
-                positions.Add(math.float2(1, 1));
-                positions.Add(math.float2(2, 1));
-                positions.Add(math.float2(2, 2));
-                positions.Add(math.float2(1, 2));
+                positions.Add(new(0, 0));
+                positions.Add(new(4, 0));
+                positions.Add(new(4, 4));
+                positions.Add(new(0, 4));
+                positions.Add(new(1, 1));
+                positions.Add(new(3, 1));
+                positions.Add(new(3, 3));
+                positions.Add(new(1, 3));
 
-                constraints.Clear();
                 constraints.Add(0); constraints.Add(1);
                 constraints.Add(1); constraints.Add(2);
                 constraints.Add(2); constraints.Add(3);
@@ -1596,19 +1228,89 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 constraints.Add(6); constraints.Add(7);
                 constraints.Add(7); constraints.Add(4);
 
-                holes.Clear();
-                holes.Add(1.5f);
+                holes.Add(new(2, 2));
+            }
+        }
+
+        [BurstCompile]
+        private struct DeferredArraySupportInputJobVector2 : IJob
+        {
+            private NativeList<Vector2> positions;
+            private NativeList<int> constraints;
+            private NativeList<Vector2> holes;
+
+            public DeferredArraySupportInputJobVector2(NativeList<T> positions, NativeList<int> constraints, NativeList<T> holes)
+            {
+                this.positions = (dynamic)positions;
+                this.constraints = constraints;
+                this.holes = (dynamic)holes;
+            }
+
+            public void Execute()
+            {
+                positions.Add(new(0, 0));
+                positions.Add(new(4, 0));
+                positions.Add(new(4, 4));
+                positions.Add(new(0, 4));
+                positions.Add(new(1, 1));
+                positions.Add(new(3, 1));
+                positions.Add(new(3, 3));
+                positions.Add(new(1, 3));
+
+                constraints.Add(0); constraints.Add(1);
+                constraints.Add(1); constraints.Add(2);
+                constraints.Add(2); constraints.Add(3);
+                constraints.Add(3); constraints.Add(0);
+                constraints.Add(4); constraints.Add(5);
+                constraints.Add(5); constraints.Add(6);
+                constraints.Add(6); constraints.Add(7);
+                constraints.Add(7); constraints.Add(4);
+
+                holes.Add(new(2, 2));
+            }
+        }
+
+        [BurstCompile]
+        private struct DeferredArraySupportInputJobInt2 : IJob
+        {
+            private NativeList<int2> positions;
+            private NativeList<int> constraints;
+            private NativeList<int2> holes;
+
+            public DeferredArraySupportInputJobInt2(NativeList<T> positions, NativeList<int> constraints, NativeList<T> holes)
+            {
+                this.positions = (dynamic)positions;
+                this.constraints = constraints;
+                this.holes = (dynamic)holes;
+            }
+
+            public void Execute()
+            {
+                positions.Add(new(0, 0));
+                positions.Add(new(4, 0));
+                positions.Add(new(4, 4));
+                positions.Add(new(0, 4));
+                positions.Add(new(1, 1));
+                positions.Add(new(3, 1));
+                positions.Add(new(3, 3));
+                positions.Add(new(1, 3));
+
+                constraints.Add(0); constraints.Add(1);
+                constraints.Add(1); constraints.Add(2);
+                constraints.Add(2); constraints.Add(3);
+                constraints.Add(3); constraints.Add(0);
+                constraints.Add(4); constraints.Add(5);
+                constraints.Add(5); constraints.Add(6);
+                constraints.Add(6); constraints.Add(7);
+                constraints.Add(7); constraints.Add(4);
+
+                holes.Add(new(2, 2));
             }
         }
 
         [Test]
         public void DeferredArraySupportTest()
         {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("Mesh refinement is not supported for int2.");
-            }
-
             using var positions = new NativeList<T>(64, Allocator.Persistent);
             using var constraints = new NativeList<int>(64, Allocator.Persistent);
             using var holes = new NativeList<T>(64, Allocator.Persistent);
@@ -1617,9 +1319,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 Settings =
                 {
                     ValidateInput = true,
-                    RefineMesh = true,
                     RestoreBoundary = true,
-                    RefinementThresholds = { Area = 1.0f },
                 },
                 Input =
                 {
@@ -1633,57 +1333,41 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             dependencies = default(T) switch
             {
-                float2 _ => new DeferredArraySupportInputJobFloat2
-                {
-                    positions = (dynamic)positions,
-                    constraints = constraints,
-                    holes = (dynamic)holes
-                }.Schedule(dependencies),
-                double2 _ => new DeferredArraySupportInputJobDouble2
-                {
-                    positions = (dynamic)positions,
-                    constraints = constraints,
-                    holes = (dynamic)holes
-                }.Schedule(dependencies),
-                _ => throw new NotImplementedException()
+                float2 _ => new DeferredArraySupportInputJobFloat2(positions, constraints, holes).Schedule(dependencies),
+                double2 _ => new DeferredArraySupportInputJobDouble2(positions, constraints, holes).Schedule(dependencies),
+                Vector2 _ => new DeferredArraySupportInputJobVector2(positions, constraints, holes).Schedule(dependencies),
+                int2 _ => new DeferredArraySupportInputJobInt2(positions, constraints, holes).Schedule(dependencies),
+                _ => throw new NotImplementedException(),
             };
 
             dependencies = triangulator.Schedule(dependencies);
             dependencies.Complete();
 
-            var expectedPositions = new[]
+            var expectedPositions = new float2[]
             {
-                math.float2(0f, 0f),
-                math.float2(3f, 0f),
-                math.float2(3f, 3f),
-                math.float2(0f, 3f),
-                math.float2(1f, 1f),
-                math.float2(2f, 1f),
-                math.float2(2f, 2f),
-                math.float2(1f, 2f),
-                math.float2(1.5f, 0f),
-                math.float2(3f, 1.5f),
-                math.float2(1.5f, 3f),
-                math.float2(0f, 1.5f),
+                new(0, 0),
+                new(4, 0),
+                new(4, 4),
+                new(0, 4),
+                new(1, 1),
+                new(3, 1),
+                new(3, 3),
+                new(1, 3),
             }.DynamicCast<T>();
             var expectedTriangles = new[]
             {
-                8, 0, 4,
-                8, 4, 5,
-                8, 5, 1,
-                9, 1, 5,
-                9, 5, 6,
-                9, 6, 2,
-                10, 3, 7,
-                10, 4, 0,
-                10, 7, 4,
-                11, 2, 6,
-                11, 6, 7,
-                11, 7, 3,
+                4, 1, 0,
+                4, 5, 1,
+                5, 6, 1,
+                0, 7, 4,
+                7, 2, 6,
+                6, 2, 1,
+                0, 3, 7,
+                7, 3, 2,
             };
 
-            Assert.That(triangulator.Output.Positions.AsArray(), Is.EquivalentTo(expectedPositions));
-            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EquivalentTo(expectedTriangles).Using(TrianglesComparer.Instance));
+            Assert.That(triangulator.Output.Positions.AsArray(), Is.EqualTo(expectedPositions));
+            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expectedTriangles).Using(TrianglesComparer.Instance));
         }
 
         [Test]
@@ -1852,329 +1536,12 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             if (verbose)
             {
-                LogAssert.Expect(UnityEngine.LogType.Error, new Regex("Sloan max iterations exceeded.*"));
+                LogAssert.Expect(LogType.Error, new Regex("Sloan max iterations exceeded.*"));
             }
 
             triangulator.Run();
 
             Assert.That(triangulator.Output.Status.Value, Is.EqualTo(Status.SloanMaxItersExceeded));
-        }
-
-        [Test]
-        public void PCATransformationPositionsConservationTest()
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("PCA transformation is not supported for int2.");
-            }
-
-            using var positions = new NativeArray<T>(new[]
-            {
-                math.float2(1, 1),
-                math.float2(2, 10),
-                math.float2(2, 11),
-                math.float2(1, 2),
-            }.DynamicCast<T>(), Allocator.Persistent);
-
-            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
-            {
-                Input = { Positions = positions },
-
-                Settings =
-                {
-                    RefineMesh = false,
-                    RestoreBoundary = true,
-                    Preprocessor = Preprocessor.PCA
-                }
-            };
-
-            triangulator.Run();
-
-            var result = triangulator.Output.Positions.AsArray().ToArray();
-            Assert.That(result, Is.EqualTo(positions).Using(TestExtensions.Comparer<T>(epsilon: 0.0001f)));
-        }
-
-        [Test]
-        public void PCATransformationPositionsConservationWithRefinementTest()
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("PCA transformation is not supported for int2.");
-            }
-
-            using var positions = new NativeArray<T>(new[]
-            {
-                math.float2(1, 1),
-                math.float2(2, 10),
-                math.float2(2, 11),
-                math.float2(1, 2),
-            }.DynamicCast<T>(), Allocator.Persistent);
-
-            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
-            {
-                Input = { Positions = positions },
-
-                Settings =
-                {
-                    RefinementThresholds = { Area = 0.01f },
-                    RefineMesh = true,
-                    RestoreBoundary = true,
-                    Preprocessor = Preprocessor.PCA
-                }
-            };
-
-            triangulator.Run();
-
-            var result = triangulator.Output.Positions.AsArray().ToArray()[..4];
-            Assert.That(result, Is.EqualTo(positions).Using(TestExtensions.Comparer<T>(epsilon: 0.0001f)));
-            Assert.That(triangulator.Output.Triangles.Length, Is.GreaterThan(2 * 3));
-        }
-
-        [Test]
-        public void PCATransformationWithHolesTest()
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("PCA transformation is not supported for int2.");
-            }
-
-            //   3 --------------------- 2
-            //   |                       |
-            //   |                       |
-            //   |                       |
-            //   |     7 ----- 6         |
-            //   |     |   X   |         |
-            //   |     |       |         |
-            //   |     4 ----- 5         |
-            //   |                       |
-            //   0 --------------------- 1
-            using var positions = new NativeArray<T>(new[]
-            {
-                math.float2(0, 0), math.float2(6, 0), math.float2(6, 6), math.float2(0, 6),
-                math.float2(1, 1), math.float2(2, 1), math.float2(2, 2), math.float2(1, 2),
-            }.DynamicCast<T>(), Allocator.Persistent);
-
-            using var constraintEdges = new NativeArray<int>(new[]
-            {
-                0, 1, 1, 2, 2, 3, 3, 0,
-                4, 5, 5, 6, 6, 7, 7, 4
-            }, Allocator.Persistent);
-
-            using var holes = new NativeArray<T>(new[] { math.float2(1.5f) }.DynamicCast<T>(), Allocator.Persistent);
-
-            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
-            {
-                Input =
-                {
-                    Positions = positions,
-                    ConstraintEdges = constraintEdges,
-                    HoleSeeds = holes,
-                },
-
-                Settings =
-                {
-                    ValidateInput = true,
-                    RefineMesh = false,
-                    RestoreBoundary = true,
-                    Preprocessor = Preprocessor.PCA
-                }
-            };
-
-            triangulator.Run();
-
-            var expected = new[]
-            {
-                0, 3, 7,
-                0, 4, 5,
-                0, 5, 1,
-                0, 7, 4,
-                1, 5, 6,
-                1, 6, 2,
-                2, 6, 3,
-                3, 6, 7,
-            };
-            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expected).Using(TrianglesComparer.Instance));
-        }
-
-        [Test]
-        public void CleanupPointsWithHolesTest()
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("Mesh refinement is not supported for int2.");
-            }
-
-            using var positions = new NativeArray<T>(new float2[]
-            {
-                new(0, 0),
-                new(8, 0),
-                new(8, 8),
-                new(0, 8),
-
-                new(2, 2),
-                new(6, 2),
-                new(6, 6),
-                new(2, 6),
-            }.DynamicCast<T>(), Allocator.Persistent);
-            using var constraintEdges = new NativeArray<int>(new[]
-            {
-                0, 1, 1, 2, 2, 3, 3, 0,
-                4, 5, 5, 6, 6, 7, 7, 4,
-            }, Allocator.Persistent);
-            using var holes = new NativeArray<T>(new[] { math.float2(4) }.DynamicCast<T>(), Allocator.Persistent);
-            using var triangulator = new Triangulator<T>(Allocator.Persistent)
-            {
-                Input = { Positions = positions, ConstraintEdges = constraintEdges, HoleSeeds = holes },
-                Settings = {
-                    RefineMesh = true,
-                    RestoreBoundary = false,
-                    RefinementThresholds = { Area = 1f },
-                },
-            };
-
-            triangulator.Schedule().Complete();
-
-            Assert.That(triangulator.Output.Triangles.AsArray(), Has.All.LessThan(triangulator.Output.Positions.Length));
-        }
-
-        [Test]
-        public void RefinementWithoutConstraintsTest()
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("Mesh refinement is not supported for int2.");
-            }
-
-            var n = 20;
-
-            using var positions = new NativeArray<T>(Enumerable
-                .Range(0, n)
-                .Select(i => math.float2(
-                    math.sin(i / (float)n * 2 * math.PI),
-                    math.cos(i / (float)n * 2 * math.PI)))
-                .DynamicCast<T>(), Allocator.Persistent);
-            using var constraints = new NativeArray<int>(Enumerable
-                .Range(0, n)
-                .SelectMany(i => new[] { i, (i + 1) % n })
-                .ToArray(), Allocator.Persistent);
-            using var triangulator = new Triangulator<T>(1024 * 1024, Allocator.Persistent)
-            {
-                Settings =
-                {
-                    ValidateInput = true,
-                    RefineMesh = true,
-                    RestoreBoundary = true,
-                    RefinementThresholds =
-                    {
-                        Area = .10f,
-                        Angle = math.radians(22f),
-                    }
-                },
-                Input =
-                {
-                    Positions = positions,
-                    ConstraintEdges = constraints,
-                }
-            };
-
-            triangulator.Run();
-
-            var trianglesWithConstraints = triangulator.Output.Triangles.AsArray().ToArray();
-
-            triangulator.Input.ConstraintEdges = default;
-            triangulator.Run();
-            var trianglesWithoutConstraints = triangulator.Output.Triangles.AsArray().ToArray();
-
-            Assert.That(trianglesWithConstraints, Is.EqualTo(trianglesWithoutConstraints));
-        }
-
-        [Test(Description = "Checks if triangulator passes for `very` accute angle input")]
-        public void AccuteInputAngleTest()
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("Mesh refinement is not supported for int2.");
-            }
-
-            using var positions = new NativeArray<T>(new[] {
-                math.float2(0, 0),
-                math.float2(10, 0),
-                math.float2(10, 1f),
-            }.DynamicCast<T>(), Allocator.Persistent);
-            using var constraints = new NativeArray<int>(new[] {
-                0, 1,
-                1, 2,
-                2, 0,
-            }, Allocator.Persistent);
-            using var triangulator = new Triangulator<T>(1024 * 1024, Allocator.Persistent)
-            {
-                Settings =
-                {
-                    ValidateInput = true,
-                    RefineMesh = true,
-                    RestoreBoundary = true,
-                    RefinementThresholds =
-                    {
-                        Area = 100f,
-                        Angle = math.radians(20f),
-                    }
-                },
-                Input =
-                {
-                    Positions = positions,
-                    ConstraintEdges = constraints,
-                }
-            };
-
-            triangulator.Run();
-
-            triangulator.Draw();
-        }
-
-        [Test]
-        public void GenericCase1Test()
-        {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("Mesh refinement is not supported for int2.");
-            }
-
-            using var positions = new NativeArray<T>(new[] {
-                math.float2(0, 0),
-                math.float2(3, 0),
-                math.float2(3, 1),
-                math.float2(0, 1),
-            }.DynamicCast<T>(), Allocator.Persistent);
-            using var constraints = new NativeArray<int>(new[] {
-                0, 1,
-                1, 2,
-                2, 3,
-                3, 0,
-                0, 2,
-            }, Allocator.Persistent);
-            using var triangulator = new Triangulator<T>(1024 * 1024, Allocator.Persistent)
-            {
-                Settings =
-                {
-                    ValidateInput = true,
-                    RefineMesh = true,
-                    RestoreBoundary = true,
-                    RefinementThresholds =
-                    {
-                        Area = .1f,
-                        Angle = math.radians(33f),
-                    }
-                },
-                Input =
-                {
-                    Positions = positions,
-                    ConstraintEdges = constraints,
-                }
-            };
-
-            triangulator.Run();
-
-            triangulator.Draw();
         }
 
         [Test]
@@ -2274,13 +1641,697 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
         }
 
         [Test]
+        public void AutoHolesTest()
+        {
+            var scaleFactor = typeof(T) == typeof(int2) ? 1000.0f : 1f;
+            var scaledPoints = LakeSuperior.Points.Select(p => p * scaleFactor).ToArray();
+            var scaledHoles = LakeSuperior.Holes.Select(h => h * scaleFactor).ToArray();
+            using var positions = new NativeArray<T>(scaledPoints.DynamicCast<T>(), Allocator.Persistent);
+            using var constraintEdges = new NativeArray<int>(LakeSuperior.Constraints, Allocator.Persistent);
+            using var holes = new NativeArray<T>(scaledHoles.DynamicCast<T>(), Allocator.Persistent);
+
+            using var triangulator = new Triangulator<T>(1024 * 1024, Allocator.Persistent)
+            {
+                Input = {
+                    Positions = positions,
+                    ConstraintEdges = constraintEdges,
+                },
+                Settings = { AutoHolesAndBoundary = true, },
+            };
+
+            triangulator.Run();
+
+            var autoResult = triangulator.Output.Triangles.AsArray().ToArray();
+
+            triangulator.Draw(color: Color.green);
+
+            triangulator.Input.HoleSeeds = holes;
+            triangulator.Settings.AutoHolesAndBoundary = false;
+            triangulator.Settings.RestoreBoundary = true;
+            triangulator.Run();
+
+            var manualResult = triangulator.Output.Triangles.AsArray().ToArray();
+            Assert.That(autoResult, Is.EqualTo(manualResult));
+        }
+    }
+
+    [TestFixture(typeof(float2))]
+    [TestFixture(typeof(Vector2))]
+    [TestFixture(typeof(double2))]
+    public class TriangulatorGenericsEditorTestsWithPCA<T> where T : unmanaged
+    {
+        [Test]
+        public void PCATransformationPositionsConservationTest()
+        {
+            using var positions = new NativeArray<T>(new[]
+            {
+                math.float2(1, 1),
+                math.float2(2, 10),
+                math.float2(2, 11),
+                math.float2(1, 2),
+            }.DynamicCast<T>(), Allocator.Persistent);
+
+            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
+            {
+                Input = { Positions = positions },
+
+                Settings =
+                {
+                    RefineMesh = false,
+                    RestoreBoundary = true,
+                    Preprocessor = Preprocessor.PCA
+                }
+            };
+
+            triangulator.Run();
+
+            var result = triangulator.Output.Positions.AsArray().ToArray();
+            Assert.That(result, Is.EqualTo(positions).Using(TestExtensions.Comparer<T>(epsilon: 0.0001f)));
+        }
+
+        [Test]
+        public void PCATransformationPositionsConservationWithRefinementTest()
+        {
+            using var positions = new NativeArray<T>(new[]
+            {
+                math.float2(1, 1),
+                math.float2(2, 10),
+                math.float2(2, 11),
+                math.float2(1, 2),
+            }.DynamicCast<T>(), Allocator.Persistent);
+
+            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
+            {
+                Input = { Positions = positions },
+
+                Settings =
+                {
+                    RefinementThresholds = { Area = 0.01f },
+                    RefineMesh = true,
+                    RestoreBoundary = true,
+                    Preprocessor = Preprocessor.PCA
+                }
+            };
+
+            triangulator.Run();
+
+            var result = triangulator.Output.Positions.AsArray().ToArray()[..4];
+            Assert.That(result, Is.EqualTo(positions).Using(TestExtensions.Comparer<T>(epsilon: 0.0001f)));
+            Assert.That(triangulator.Output.Triangles.Length, Is.GreaterThan(2 * 3));
+        }
+
+        [Test]
+        public void PCATransformationWithHolesTest()
+        {
+            //   3 --------------------- 2
+            //   |                       |
+            //   |                       |
+            //   |                       |
+            //   |     7 ----- 6         |
+            //   |     |   X   |         |
+            //   |     |       |         |
+            //   |     4 ----- 5         |
+            //   |                       |
+            //   0 --------------------- 1
+            using var positions = new NativeArray<T>(new[]
+            {
+                math.float2(0, 0), math.float2(6, 0), math.float2(6, 6), math.float2(0, 6),
+                math.float2(1, 1), math.float2(2, 1), math.float2(2, 2), math.float2(1, 2),
+            }.DynamicCast<T>(), Allocator.Persistent);
+
+            using var constraintEdges = new NativeArray<int>(new[]
+            {
+                0, 1, 1, 2, 2, 3, 3, 0,
+                4, 5, 5, 6, 6, 7, 7, 4
+            }, Allocator.Persistent);
+
+            using var holes = new NativeArray<T>(new[] { math.float2(1.5f) }.DynamicCast<T>(), Allocator.Persistent);
+
+            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
+            {
+                Input =
+                {
+                    Positions = positions,
+                    ConstraintEdges = constraintEdges,
+                    HoleSeeds = holes,
+                },
+
+                Settings =
+                {
+                    ValidateInput = true,
+                    RefineMesh = false,
+                    RestoreBoundary = true,
+                    Preprocessor = Preprocessor.PCA
+                }
+            };
+
+            triangulator.Run();
+
+            var expected = new[]
+            {
+                0, 3, 7,
+                0, 4, 5,
+                0, 5, 1,
+                0, 7, 4,
+                1, 5, 6,
+                1, 6, 2,
+                2, 6, 3,
+                3, 6, 7,
+            };
+            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expected).Using(TrianglesComparer.Instance));
+        }
+    }
+
+    [TestFixture(typeof(float2))]
+    [TestFixture(typeof(Vector2))]
+    [TestFixture(typeof(double2))]
+    public class TriangulatorGenericsEditorTestsWithRefinement<T> where T : unmanaged
+    {
+        [Test]
+        public void DelaunayTriangulationWithRefinementTest()
+        {
+            ///  3 ------- 2
+            ///  |         |
+            ///  |         |
+            ///  |         |
+            ///  0 ------- 1
+            using var positions = new NativeArray<T>(new[]
+            {
+                math.float2(0, 0),
+                math.float2(1, 0),
+                math.float2(1, 1),
+                math.float2(0, 1)
+            }.DynamicCast<T>(), Allocator.Persistent);
+
+            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
+            {
+                Settings =
+                {
+                    RefineMesh = true,
+                    RefinementThresholds = { Area = 0.3f, Angle = math.radians(20f) }
+                },
+                Input = { Positions = positions },
+            };
+
+            triangulator.Run();
+
+            var expectedPositions = new[]
+            {
+                math.float2(0, 0),
+                math.float2(1, 0),
+                math.float2(1, 1),
+                math.float2(0, 1),
+                math.float2(1, 0.5f),
+                math.float2(0, 0.5f),
+            }.DynamicCast<T>();
+            var expectedTriangles = new[]
+            {
+                5, 1, 0,
+                5, 2, 4,
+                5, 3, 2,
+                5, 4, 1,
+            };
+            Assert.That(triangulator.Output.Positions.AsArray(), Is.EqualTo(expectedPositions));
+            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expectedTriangles).Using(TrianglesComparer.Instance));
+        }
+
+        private static readonly TestCaseData[] constraintDelaunayTriangulationWithRefinementTestData =
+        {
+            //  3 -------- 2
+            //  | ' .      |
+            //  |    ' .   |
+            //  |       ' .|
+            //  0 -------- 1
+            new((
+                new []
+                {
+                    math.float2(0, 0),
+                    math.float2(1, 0),
+                    math.float2(1, 1),
+                    math.float2(0, 1)
+                },
+                new []
+                {
+                    0, 1,
+                    1, 2,
+                    2, 3,
+                    3, 0,
+                    0, 2
+                },
+                new []
+                {
+                    math.float2(0.5f, 0.5f),
+                    math.float2(1f, 0.5f),
+                    math.float2(0.5f, 0f),
+                    math.float2(0f, 0.5f),
+                    math.float2(0.8189806f, 0.8189806f),
+                    math.float2(0.1810194f, 0.1810194f),
+                    math.float2(0.5f, 1f),
+                    math.float2(0.256f, 0f),
+                    math.float2(0f, 0.256f),
+                    math.float2(0.744f, 1f),
+                },
+                new []
+                {
+                    6, 4, 5,
+                    6, 5, 1,
+                    8, 2, 5,
+                    8, 5, 4,
+                    9, 4, 6,
+                    9, 7, 4,
+                    10, 4, 7,
+                    10, 7, 3,
+                    10, 8, 4,
+                    11, 0, 9,
+                    11, 9, 6,
+                    12, 7, 9,
+                    12, 9, 0,
+                    13, 2, 8,
+                    13, 8, 10,
+                }
+            )){ TestName = "Test case 1 (square)" },
+
+            //  5 -------- 4 -------- 3
+            //  |       . '|      . ' |
+            //  |    . '   |   . '    |
+            //  |. '      .|. '       |
+            //  0 -------- 1 -------- 2
+            new((
+                new []
+                {
+                    math.float2(0, 0),
+                    math.float2(1, 0),
+                    math.float2(2, 0),
+                    math.float2(2, 1),
+                    math.float2(1, 1),
+                    math.float2(0, 1),
+                },
+                new []
+                {
+                    0, 1,
+                    1, 2,
+                    2, 3,
+                    3, 4,
+                    4, 5,
+                    5, 0,
+                    0, 3
+                },
+                new []
+                {
+                    math.float2(1f, 0.5f),
+                    math.float2(0.4579467f, 0.2289734f),
+                    math.float2(1.542053f, 0.7710266f),
+                    math.float2(0.5f, 0f),
+                    math.float2(1.5f, 1f),
+                },
+                new []
+                {
+                    7, 0, 5,
+                    7, 4, 6,
+                    7, 5, 4,
+                    7, 6, 1,
+                    8, 1, 6,
+                    8, 2, 1,
+                    8, 3, 2,
+                    8, 6, 4,
+                    9, 0, 7,
+                    9, 7, 1,
+                    10, 3, 8,
+                    10, 8, 4,
+                }
+            )){ TestName = "Test case 2 (rectangle)" },
+            new((
+                managedPositions: new[]
+                {
+                    math.float2(0, 0),
+                    math.float2(1, 0),
+                    math.float2(1, 1),
+                    math.float2(0.75f, 0.75f),
+                    math.float2(0, 1),
+                },
+                constraints: new[]
+                {
+                    0, 1,
+                    1, 2,
+                    2, 3,
+                    3, 4,
+                    4, 0,
+                },
+                insertedPoints: new[]
+                {
+                    math.float2(1f, 0.5f),
+                    math.float2(1f, 0.744f),
+                },
+                triangles: new[]
+                {
+                    0, 4, 3,
+                    5, 0, 3,
+                    5, 1, 0,
+                    6, 3, 2,
+                    6, 5, 3,
+                }
+            )){ TestName = "Test case 3 (strange box)" },
+        };
+
+        [Test, TestCaseSource(nameof(constraintDelaunayTriangulationWithRefinementTestData))]
+        public void ConstraintDelaunayTriangulationWithRefinementTest((float2[] managedPositions, int[] constraints, float2[] insertedPoints, int[] triangles) input)
+        {
+            using var positions = new NativeArray<T>(input.managedPositions.DynamicCast<T>(), Allocator.Persistent);
+            using var constraintEdges = new NativeArray<int>(input.constraints, Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
+            {
+                Settings =
+                {
+                    RefineMesh = true,
+                    RestoreBoundary = true,
+                    RefinementThresholds = { Area = 10.3f, Angle = 0 },
+                },
+                Input =
+                {
+                    Positions = positions,
+                    ConstraintEdges = constraintEdges,
+                }
+            };
+
+            triangulator.Run();
+
+            var expected = input.managedPositions.Union(input.insertedPoints).DynamicCast<T>();
+            Assert.That(triangulator.Output.Positions.AsArray(), Is.EqualTo(expected).Using(TestExtensions.Comparer<T>()));
+            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(input.triangles).Using(TrianglesComparer.Instance));
+        }
+
+        [Test]
+        public void BoundaryReconstructionWithRefinementTest()
+        {
+            // 4.             .2
+            // | '.         .' |
+            // |   '.     .'   |
+            // |     '. .'     |
+            // |       3       |
+            // |               |
+            // 0 ------------- 1
+            var managedPositions = new[]
+            {
+                math.float2(0, 0),
+                math.float2(1, 0),
+                math.float2(1, 1),
+                math.float2(0.5f, 0.25f),
+                math.float2(0, 1),
+            };
+
+            var constraints = new[]
+            {
+                0, 1,
+                1, 2,
+                2, 3,
+                3, 4,
+                4, 0
+            };
+
+            using var positions = new NativeArray<T>(managedPositions.DynamicCast<T>(), Allocator.Persistent);
+            using var constraintEdges = new NativeArray<int>(constraints, Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
+            {
+                Settings =
+                {
+                    RefineMesh = true,
+                    RestoreBoundary = true,
+                    RefinementThresholds = { Area = 0.25f }
+                },
+                Input =
+                {
+                    Positions = positions,
+                    ConstraintEdges = constraintEdges,
+                }
+            };
+
+            triangulator.Run();
+
+            var expectedPositions = managedPositions.Union(
+                new[] { math.float2(0.5f, 0f) }
+            ).ToArray().DynamicCast<T>();
+            var expectedTriangles = new[]
+            {
+                2, 1, 3,
+                3, 0, 4,
+                5, 0, 3,
+                5, 3, 1,
+            };
+            Assert.That(triangulator.Output.Positions.AsArray(), Is.EqualTo(expectedPositions));
+            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expectedTriangles).Using(TrianglesComparer.Instance));
+        }
+
+        [Test]
+        public void TriangulationWithHolesWithRefinementTest()
+        {
+            //   * --------------------- *
+            //   |                       |
+            //   |                       |
+            //   |       * ----- *       |
+            //   |       |   X   |       |
+            //   |       |       |       |
+            //   |       * ----- *       |
+            //   |                       |
+            //   |                       |
+            //   * --------------------- *
+            var managedPositions = new[]
+            {
+                math.float2(0, 0),
+                math.float2(3, 0),
+                math.float2(3, 3),
+                math.float2(0, 3),
+
+                math.float2(1, 1),
+                math.float2(2, 1),
+                math.float2(2, 2),
+                math.float2(1, 2),
+            }.DynamicCast<T>();
+
+            var constraints = new[]
+            {
+                0, 1,
+                1, 2,
+                2, 3,
+                3, 0,
+
+                4, 5,
+                5, 6,
+                6, 7,
+                7, 4
+            };
+
+            using var positions = new NativeArray<T>(managedPositions, Allocator.Persistent);
+            using var constraintEdges = new NativeArray<int>(constraints, Allocator.Persistent);
+            using var holes = new NativeArray<T>(new[] { (float2)1.5f }.DynamicCast<T>(), Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
+            {
+                Settings =
+                {
+                    RefineMesh = true,
+                    RestoreBoundary = true,
+                    RefinementThresholds = { Area = 1.0f },
+                },
+                Input =
+                {
+                    Positions = positions,
+                    ConstraintEdges = constraintEdges,
+                    HoleSeeds = holes,
+                }
+            };
+
+            triangulator.Run();
+
+            var expectedPositions = managedPositions.Union(new float2[]
+            {
+                math.float2(1.5f, 0f),
+                math.float2(3f, 1.5f),
+                math.float2(1.5f, 3f),
+                math.float2(0f, 1.5f),
+            }.DynamicCast<T>());
+            var expectedTriangles = new[]
+            {
+                8, 0, 4,
+                8, 4, 5,
+                8, 5, 1,
+                9, 1, 5,
+                9, 5, 6,
+                9, 6, 2,
+                10, 3, 7,
+                10, 4, 0,
+                10, 7, 4,
+                11, 2, 6,
+                11, 6, 7,
+                11, 7, 3,
+            };
+
+            Assert.That(triangulator.Output.Positions.AsArray(), Is.EquivalentTo(expectedPositions));
+            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expectedTriangles).Using(TrianglesComparer.Instance));
+        }
+
+        [Test]
+        public void CleanupPointsWithHolesTest()
+        {
+            using var positions = new NativeArray<T>(new float2[]
+            {
+                new(0, 0),
+                new(8, 0),
+                new(8, 8),
+                new(0, 8),
+
+                new(2, 2),
+                new(6, 2),
+                new(6, 6),
+                new(2, 6),
+            }.DynamicCast<T>(), Allocator.Persistent);
+            using var constraintEdges = new NativeArray<int>(new[]
+            {
+                0, 1, 1, 2, 2, 3, 3, 0,
+                4, 5, 5, 6, 6, 7, 7, 4,
+            }, Allocator.Persistent);
+            using var holes = new NativeArray<T>(new[] { math.float2(4) }.DynamicCast<T>(), Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(Allocator.Persistent)
+            {
+                Input = { Positions = positions, ConstraintEdges = constraintEdges, HoleSeeds = holes },
+                Settings = {
+                    RefineMesh = true,
+                    RestoreBoundary = false,
+                    RefinementThresholds = { Area = 1f },
+                },
+            };
+
+            triangulator.Schedule().Complete();
+
+            Assert.That(triangulator.Output.Triangles.AsArray(), Has.All.LessThan(triangulator.Output.Positions.Length));
+        }
+
+        [Test]
+        public void RefinementWithoutConstraintsTest()
+        {
+            var n = 20;
+
+            using var positions = new NativeArray<T>(Enumerable
+                .Range(0, n)
+                .Select(i => math.float2(
+                    math.sin(i / (float)n * 2 * math.PI),
+                    math.cos(i / (float)n * 2 * math.PI)))
+                .DynamicCast<T>(), Allocator.Persistent);
+            using var constraints = new NativeArray<int>(Enumerable
+                .Range(0, n)
+                .SelectMany(i => new[] { i, (i + 1) % n })
+                .ToArray(), Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(1024 * 1024, Allocator.Persistent)
+            {
+                Settings =
+                {
+                    ValidateInput = true,
+                    RefineMesh = true,
+                    RestoreBoundary = true,
+                    RefinementThresholds =
+                    {
+                        Area = .10f,
+                        Angle = math.radians(22f),
+                    }
+                },
+                Input =
+                {
+                    Positions = positions,
+                    ConstraintEdges = constraints,
+                }
+            };
+
+            triangulator.Run();
+
+            var trianglesWithConstraints = triangulator.Output.Triangles.AsArray().ToArray();
+
+            triangulator.Input.ConstraintEdges = default;
+            triangulator.Run();
+            var trianglesWithoutConstraints = triangulator.Output.Triangles.AsArray().ToArray();
+
+            Assert.That(trianglesWithConstraints, Is.EqualTo(trianglesWithoutConstraints));
+        }
+
+        [Test(Description = "Checks if triangulator passes for `very` accute angle input")]
+        public void AccuteInputAngleTest()
+        {
+            using var positions = new NativeArray<T>(new[] {
+                math.float2(0, 0),
+                math.float2(10, 0),
+                math.float2(10, 1f),
+            }.DynamicCast<T>(), Allocator.Persistent);
+            using var constraints = new NativeArray<int>(new[] {
+                0, 1,
+                1, 2,
+                2, 0,
+            }, Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(1024 * 1024, Allocator.Persistent)
+            {
+                Settings =
+                {
+                    ValidateInput = true,
+                    RefineMesh = true,
+                    RestoreBoundary = true,
+                    RefinementThresholds =
+                    {
+                        Area = 100f,
+                        Angle = math.radians(20f),
+                    }
+                },
+                Input =
+                {
+                    Positions = positions,
+                    ConstraintEdges = constraints,
+                }
+            };
+
+            triangulator.Run();
+
+            triangulator.Draw();
+        }
+
+        [Test]
+        public void GenericCase1Test()
+        {
+            using var positions = new NativeArray<T>(new[] {
+                math.float2(0, 0),
+                math.float2(3, 0),
+                math.float2(3, 1),
+                math.float2(0, 1),
+            }.DynamicCast<T>(), Allocator.Persistent);
+            using var constraints = new NativeArray<int>(new[] {
+                0, 1,
+                1, 2,
+                2, 3,
+                3, 0,
+                0, 2,
+            }, Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(1024 * 1024, Allocator.Persistent)
+            {
+                Settings =
+                {
+                    ValidateInput = true,
+                    RefineMesh = true,
+                    RestoreBoundary = true,
+                    RefinementThresholds =
+                    {
+                        Area = .1f,
+                        Angle = math.radians(33f),
+                    }
+                },
+                Input =
+                {
+                    Positions = positions,
+                    ConstraintEdges = constraints,
+                }
+            };
+
+            triangulator.Run();
+
+            triangulator.Draw();
+        }
+
+        [Test]
         public void HalfedgesForTriangulationWithRefinementTest()
         {
-            if (typeof(T) == typeof(int2))
-            {
-                Assert.Ignore("Mesh refinement is not supported for int2.");
-            }
-
             using var positions = new NativeArray<T>(new float2[]
             {
                 math.float2(0, 0),
@@ -2309,40 +2360,6 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 true, true, false, true, true, false,
                 false, false, false, false, true, true,
             }));
-        }
-
-        [Test]
-        public void AutoHolesTest()
-        {
-            var scaleFactor = typeof(T) == typeof(int2) ? 1000.0f : 1f;
-            var scaledPoints = LakeSuperior.Points.Select(p => p * scaleFactor).ToArray();
-            var scaledHoles = LakeSuperior.Holes.Select(h => h * scaleFactor).ToArray();
-            using var positions = new NativeArray<T>(scaledPoints.DynamicCast<T>(), Allocator.Persistent);
-            using var constraintEdges = new NativeArray<int>(LakeSuperior.Constraints, Allocator.Persistent);
-            using var holes = new NativeArray<T>(scaledHoles.DynamicCast<T>(), Allocator.Persistent);
-
-            using var triangulator = new Triangulator<T>(1024 * 1024, Allocator.Persistent)
-            {
-                Input = {
-                    Positions = positions,
-                    ConstraintEdges = constraintEdges,
-                },
-                Settings = { AutoHolesAndBoundary = true, },
-            };
-
-            triangulator.Run();
-
-            var autoResult = triangulator.Output.Triangles.AsArray().ToArray();
-
-            triangulator.Draw(color: UnityEngine.Color.green);
-
-            triangulator.Input.HoleSeeds = holes;
-            triangulator.Settings.AutoHolesAndBoundary = false;
-            triangulator.Settings.RestoreBoundary = true;
-            triangulator.Run();
-
-            var manualResult = triangulator.Output.Triangles.AsArray().ToArray();
-            Assert.That(autoResult, Is.EqualTo(manualResult));
         }
     }
 }
