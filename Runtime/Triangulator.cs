@@ -56,8 +56,10 @@ namespace andywiecko.BurstTriangulator
         /// depending on the provided <see cref="InputData{T2}.ConstraintEdges"/>.
         /// </summary>
         /// <remarks>
-        /// The current implementation detects only <em>1-level islands</em>.
-        /// It will not detect holes in <em>solid</em> meshes inside other holes.
+        /// This implements the <see href="https://en.wikipedia.org/wiki/Even%E2%80%93odd_rule">odd-even fill rule</see>.
+        ///
+        /// When this mode is used, you should ensure that all constraints form closed loops. If any constraints are part of open chains,
+        /// then the result is not well-defined.
         /// </remarks>
         [field: SerializeField]
         public bool AutoHolesAndBoundary { get; set; } = false;
@@ -1587,7 +1589,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private NativeList<bool> constrainedHalfedges;
             private NativeList<int> halfedges;
 
-            private NativeArray<bool> visitedTriangles;
+            private NativeArray<bool> shouldRemoveTriangle;
             private NativeQueue<int> trianglesQueue;
             private NativeArray<T2> holes;
             private bool anyRemovedTriangles;
@@ -1606,7 +1608,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 holes = localHoles;
                 this.args = args;
 
-                visitedTriangles = default;
+                shouldRemoveTriangle = default;
                 trianglesQueue = default;
                 anyRemovedTriangles = false;
             }
@@ -1620,7 +1622,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     return;
                 }
 
-                visitedTriangles = new(triangles.Length / 3, allocator);
+                shouldRemoveTriangle = new(triangles.Length / 3, allocator);
                 trianglesQueue = new(allocator);
 
                 if (args.AutoHolesAndBoundary) PlantAuto(allocator);
@@ -1635,7 +1637,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 for (int he = 0; he < halfedges.Length; he++)
                 {
                     if (halfedges[he] == -1 &&
-                        !visitedTriangles[he / 3] &&
+                        !shouldRemoveTriangle[he / 3] &&
                         !constrainedHalfedges[he])
                     {
                         PlantSeed(he / 3);
@@ -1660,9 +1662,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 int triangleCount = 0;
                 // Calculate a mapping of old triangle indices to new triangle indices, after some triangles have been removed
                 var triangleIndexRemap = new NativeArray<int>(this.triangles.Length / 3, allocator);
-                for (int tId = 0; tId < visitedTriangles.Length; tId++)
+                for (int tId = 0; tId < shouldRemoveTriangle.Length; tId++)
                 {
-                    triangleIndexRemap[tId] = visitedTriangles[tId] ? -1 : triangleCount++;
+                    triangleIndexRemap[tId] = shouldRemoveTriangle[tId] ? -1 : triangleCount++;
                 }
 
                 int RemapHalfEdge (int he) {
@@ -1696,15 +1698,15 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             private void PlantSeed(int tId)
             {
-                var visitedTriangles = this.visitedTriangles;
+                var shouldRemoveTriangle = this.shouldRemoveTriangle;
                 var trianglesQueue = this.trianglesQueue;
 
-                if (visitedTriangles[tId])
+                if (shouldRemoveTriangle[tId])
                 {
                     return;
                 }
 
-                visitedTriangles[tId] = true;
+                shouldRemoveTriangle[tId] = true;
                 trianglesQueue.Enqueue(tId);
                 anyRemovedTriangles = true;
 
@@ -1722,9 +1724,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                         }
 
                         var otherId = ohe / 3;
-                        if (!visitedTriangles[otherId])
+                        if (!shouldRemoveTriangle[otherId])
                         {
-                            visitedTriangles[otherId] = true;
+                            shouldRemoveTriangle[otherId] = true;
                             trianglesQueue.Enqueue(otherId);
                         }
                     }
@@ -1748,117 +1750,52 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             private void PlantAuto(Allocator allocator)
             {
-                using var heQueue = new NativeQueue<int>(allocator);
-                using var loop = new NativeList<int>(allocator);
-                var heVisited = new NativeArray<bool>(halfedges.Length, allocator);
+                var triCount = triangles.Length / 3;
+                var queue = new NativeQueue<int>(allocator);
+                var nextQueue = new NativeQueue<int>(allocator);
+                var visitedTriangles = new NativeArray<bool>(triCount, allocator);
 
-                // Build boundary loop: 1st sweep
-                for (int he = 0; he < halfedges.Length; he++)
+                // Start at the boundary of the triangulation
+                for (int tId = 0; tId < triCount; tId++)
                 {
-                    if (halfedges[he] != -1 || heVisited[he])
-                    {
-                        continue;
-                    }
-
-                    heVisited[he] = true;
-                    if (constrainedHalfedges[he])
-                    {
-                        loop.Add(he);
-                    }
-                    else
-                    {
-                        if (!visitedTriangles[he / 3])
-                        {
-                            PlantSeed(he / 3);
-                        }
-
-                        var h2 = NextHalfedge(he);
-                        if (halfedges[h2] != -1 && !heVisited[h2])
-                        {
-                            heQueue.Enqueue(h2);
-                            heVisited[h2] = true;
-                        }
-
-                        var h3 = NextHalfedge(h2);
-                        if (halfedges[h3] != -1 && !heVisited[h3])
-                        {
-                            heQueue.Enqueue(h3);
-                            heVisited[h3] = true;
+                    for (int i = 0; i < 3; i++) {
+                        if (halfedges[3*tId + i] == -1) {
+                            (constrainedHalfedges[3*tId + i] ? nextQueue : queue).Enqueue(tId);
+                            visitedTriangles[tId] = true;
+                            break;
                         }
                     }
                 }
 
-                // Build boundary loop: 2nd sweep
-                while (heQueue.TryDequeue(out var he))
-                {
-                    var ohe = halfedges[he]; // valid `ohe` should always exist, -1 are eliminated in the 1st sweep!
-                    if (constrainedHalfedges[ohe])
-                    {
-                        heVisited[ohe] = true;
-                        loop.Add(ohe);
-                    }
-                    else
-                    {
-                        ohe = NextHalfedge(ohe);
-                        if (!heVisited[ohe])
-                        {
-                            heVisited[ohe] = true;
-                            heQueue.Enqueue(ohe);
+                // Search inwards from the boundary
+                // When crossing a constrained edge, we flip between removing triangles and keeping triangles
+                // This effectively implements the EvenOdd fill mode (https://en.wikipedia.org/wiki/Even%E2%80%93odd_rule).
+                bool anyRemovedTriangles = false;
+                for (bool remove = true; !queue.IsEmpty() || !nextQueue.IsEmpty(); remove = !remove) {
+                    while (queue.TryDequeue(out var tId)) {
+                        if (remove) {
+                            shouldRemoveTriangle[tId] = true;
+                            anyRemovedTriangles = true;
                         }
 
-                        ohe = NextHalfedge(ohe);
-                        if (!heVisited[ohe])
-                        {
-                            heVisited[ohe] = true;
-                            heQueue.Enqueue(ohe);
+                        for (int i = 0; i < 3; i++) {
+                            var he = 3 * tId + i;
+                            var ohe = halfedges[he];
+                            var oTri = ohe / 3;
+                            if (ohe != -1 && !visitedTriangles[oTri]) {
+                                (constrainedHalfedges[he] ? nextQueue : queue).Enqueue(oTri);
+                                visitedTriangles[oTri] = true;
+                            }
                         }
                     }
+
+                    (queue, nextQueue) = (nextQueue, queue);
                 }
 
-                // Plant seeds for non visited constraint edges
-                foreach (var h1 in loop)
-                {
-                    var h2 = NextHalfedge(h1);
-                    if (!heVisited[h2])
-                    {
-                        heQueue.Enqueue(h2);
-                        heVisited[h2] = true;
-                    }
-
-                    var h3 = NextHalfedge(h2);
-                    if (!heVisited[h3])
-                    {
-                        heQueue.Enqueue(h3);
-                        heVisited[h3] = true;
-                    }
-                }
-                while (heQueue.TryDequeue(out var he))
-                {
-                    var ohe = halfedges[he];
-                    if (constrainedHalfedges[ohe])
-                    {
-                        heVisited[ohe] = true;
-                        PlantSeed(ohe / 3);
-                    }
-                    else
-                    {
-                        ohe = NextHalfedge(ohe);
-                        if (!heVisited[ohe])
-                        {
-                            heQueue.Enqueue(ohe);
-                            heVisited[ohe] = true;
-                        }
-
-                        ohe = NextHalfedge(ohe);
-                        if (!heVisited[ohe])
-                        {
-                            heQueue.Enqueue(ohe);
-                            heVisited[ohe] = true;
-                        }
-                    }
-                }
-
-                heVisited.Dispose();
+                this.anyRemovedTriangles = anyRemovedTriangles;
+                queue.Dispose();
+                nextQueue.Dispose();
+                visitedTriangles.Dispose();
             }
         }
 
