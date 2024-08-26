@@ -10,8 +10,6 @@ For online version see [Github Releases].
 ## Unpublished
 
 - Removed the concentric shells parameter from the settings. It is now a hardcoded constant that should work well for all triangulations.
-- Removed `AsNativeArray` since it could cause memory corruption if a garbage collection happened to run while the native array was used.
-- Removed managed input support since it was inherently impossible to use safely and could caue memory corruption (it used `AsNativeArray` under the hood).
 - Improved error reporting, so you can now access information about the error via code, instead of just "there was an error".
 - `Args` is now blittable, making it possible to pass it via `ref` to burstified static functions.
 - Constraints passing through vertices is now acceptable input. If a constraint A->C passes through an input vertex B, then the constraint will be split up to behave identically to the two constraints A -> B and B -> C.

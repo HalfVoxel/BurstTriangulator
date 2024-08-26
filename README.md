@@ -21,6 +21,7 @@ A single-file package which provides Delaunay triangulation of the given set of 
 - **Input validation** [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/advanced/input-validation.html)
 - **Generic coordinates** (`float2`, `double2`) [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/advanced/generic-coordinates.html)
 - **Native support** (low level API) [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/advanced/unsafe-triangulator.html)
+- **Managed input support** [ᵈᵒᶜˢ↗](https://github.com/halfvoxel/BurstTriangulator/manual/advanced/input-managed.html)
 
 To view the documentation for the manual and scripting API access it online [**here**][manual] or navigate to `Documentation~/` and build this using `docfx.json`.
 

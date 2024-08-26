@@ -66,5 +66,68 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             if (holes.IsCreated) { holes.Dispose(); }
             if (constraints.IsCreated) { constraints.Dispose(); }
         }
+
+        [Test]
+        public void ManagedInputTest([Values] bool constrain, [Values] bool holes)
+        {
+            using var positions = new NativeArray<float2>(LakeSuperior.Points, Allocator.Persistent);
+            using var constraints = new NativeArray<int>(LakeSuperior.Constraints, Allocator.Persistent);
+            using var holeSeeds = new NativeArray<float2>(LakeSuperior.Holes, Allocator.Persistent);
+            using var t0 = new Triangulator<float2>(Allocator.Persistent)
+            {
+                Input = {
+                    Positions = positions,
+                    ConstraintEdges = constrain ? constraints : default,
+                    HoleSeeds = holes ? holeSeeds : default
+                },
+                Settings = { RestoreBoundary = true },
+            };
+            using var t1 = new Triangulator<float2>(Allocator.Persistent)
+            {
+                Input = new ManagedInput<float2>
+                {
+                    Positions = LakeSuperior.Points,
+                    ConstraintEdges = constrain ? LakeSuperior.Constraints : null,
+                    HoleSeeds = holes ? LakeSuperior.Holes : null
+                },
+                Settings = { RestoreBoundary = true },
+            };
+
+            t0.Run();
+            t1.Run();
+
+            Assert.That(t0.Output.Triangles.AsArray().ToArray(), Is.EqualTo(t1.Output.Triangles.AsArray().ToArray()));
+            Assert.That(t0.Output.Halfedges.AsArray().ToArray(), Is.EqualTo(t1.Output.Halfedges.AsArray().ToArray()));
+            Assert.That(t0.Output.Positions.AsArray().ToArray(), Is.EqualTo(t1.Output.Positions.AsArray().ToArray()));
+        }
+
+        [Test]
+        public void AsNativeArrayTest()
+        {
+            int[] a = { 1, 2, 3, 4, 5, 6, };
+            var view = a.AsNativeArray();
+            Assert.That(view, Is.EqualTo(a));
+        }
+
+        [BurstCompile]
+        private struct AsNativeArrayJob : IJob
+        {
+            public NativeArray<int> a;
+            public void Execute()
+            {
+                for (int i = 0; i < a.Length; i++)
+                {
+                    a[i] += 1;
+                }
+            }
+        }
+
+        [Test]
+        public void AsNativeArrayInJobTest()
+        {
+            int[] a = { 1, 2, 3, 4, 5, 6, };
+            new AsNativeArrayJob { a = a.AsNativeArray() }.Run();
+            Assert.That(a, Is.EqualTo(new[] { 2, 3, 4, 5, 6, 7 }));
+        }
     }
 }
