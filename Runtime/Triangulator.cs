@@ -264,27 +264,8 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
     {
         public readonly Preprocessor Preprocessor;
         public readonly int SloanMaxIters;
+        public readonly bool AutoHolesAndBoundary, RefineMesh, RestoreBoundary, ValidateInput, Verbose;
         public readonly float RefinementThresholdAngle, RefinementThresholdArea;
-
-        /// <summary>
-        /// Bitpacked flags for various settings.
-        ///
-        /// These are not really bitpacked for performance or memory reasons, but because burst does not support blitting booleans.
-        /// This means that if they were individual fields, one would not be able to pass a `ref Args` to a burstified static function.
-        /// </summary>
-        readonly byte flags;
-
-        const byte AutoHolesAndBoundaryFlag = 1;
-        const byte RefineMeshFlag = 2;
-        const byte RestoreBoundaryFlag = 4;
-        const byte ValidateInputFlag = 8;
-        const byte VerboseFlag = 16;
-
-        public readonly bool AutoHolesAndBoundary => (flags & AutoHolesAndBoundaryFlag) != 0;
-        public readonly bool RefineMesh => (flags & RefineMeshFlag) != 0;
-        public readonly bool RestoreBoundary => (flags & RestoreBoundaryFlag) != 0;
-        public readonly bool ValidateInput => (flags & ValidateInputFlag) != 0;
-        public readonly bool Verbose => (flags & VerboseFlag) != 0;
 
         public Args(
             Preprocessor preprocessor,
@@ -293,13 +274,13 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             float refinementThresholdAngle, float refinementThresholdArea
         )
         {
-            flags = (byte)((autoHolesAndBoundary ? AutoHolesAndBoundaryFlag : 0)
-                | (refineMesh ? RefineMeshFlag : 0)
-                | (restoreBoundary ? RestoreBoundaryFlag : 0)
-                | (validateInput ? ValidateInputFlag : 0)
-                | (verbose ? VerboseFlag : 0));
+            AutoHolesAndBoundary = autoHolesAndBoundary;
             Preprocessor = preprocessor;
+            RefineMesh = refineMesh;
+            RestoreBoundary = restoreBoundary;
             SloanMaxIters = sloanMaxIters;
+            ValidateInput = validateInput;
+            Verbose = verbose;
             RefinementThresholdAngle = refinementThresholdAngle;
             RefinementThresholdArea = refinementThresholdArea;
         }
