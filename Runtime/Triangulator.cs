@@ -835,14 +835,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 triangles.Length = 3 * maxTriangles;
                 halfedges.Length = 3 * maxTriangles;
 
-                using var _hullPrev = hullPrev = new(n, allocator);
-                using var _hullNext = hullNext = new(n, allocator);
-                using var _hullTri = hullTri = new(n, allocator);
-                using var _hullHash = hullHash = new(hashSize, allocator);
-                using var _EDGE_STACK = EDGE_STACK = new(512, allocator);
-
                 var ids = new NativeArray<int>(n, allocator);
-                var dists = new NativeArray<TBig>(n, allocator);
 
                 var min = utils.MaxValue2();
                 var max = utils.MinValue2();
@@ -904,8 +897,16 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 if (i2 == int.MaxValue || math.any(utils.eq(utils.CircumCenter(p0, p1, positions[i2]), utils.MaxValue2())))
                 {
                     status.Value = Status.DegenerateInput;
+                    ids.Dispose();
                     return;
                 }
+
+                var dists = new NativeArray<TBig>(n, allocator);
+                using var _hullPrev = hullPrev = new(n, allocator);
+                using var _hullNext = hullNext = new(n, allocator);
+                using var _hullTri = hullTri = new(n, allocator);
+                using var _hullHash = hullHash = new(hashSize, allocator);
+                using var _EDGE_STACK = EDGE_STACK = new(512, allocator);
 
                 // Vertex closest to p1 and p2, as measured by the circumscribed circle radius of p1, p2, p3
                 // Thus (p1,p2,p3) form a triangle close to the center of the point set, and it's guaranteed that there
