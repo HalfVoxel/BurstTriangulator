@@ -520,6 +520,18 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         where TTransform : unmanaged, ITransform<TTransform, T, T2>
         where TUtils : unmanaged, IUtils<T, T2, TBig>
     {
+        // NOTE: Caching ProfileMarker can boost performance for triangulations with small input (~10² triangles).
+        private readonly struct Markers
+        {
+            public static readonly ProfilerMarker PreProcessInputStep = new(nameof(UnsafeTriangulator<T, T2, TBig, TTransform, TUtils>.PreProcessInputStep));
+            public static readonly ProfilerMarker PostProcessInputStep = new(nameof(UnsafeTriangulator<T, T2, TBig, TTransform, TUtils>.PostProcessInputStep));
+            public static readonly ProfilerMarker ValidateInputStep = new(nameof(UnsafeTriangulator<T, T2, TBig, TTransform, TUtils>.ValidateInputStep));
+            public static readonly ProfilerMarker DelaunayTriangulationStep = new(nameof(UnsafeTriangulator<T, T2, TBig, TTransform, TUtils>.DelaunayTriangulationStep));
+            public static readonly ProfilerMarker ConstrainEdgesStep = new(nameof(UnsafeTriangulator<T, T2, TBig, TTransform, TUtils>.ConstrainEdgesStep));
+            public static readonly ProfilerMarker PlantingSeedStep = new(nameof(UnsafeTriangulator<T, T2, TBig, TTransform, TUtils>.PlantingSeedStep));
+            public static readonly ProfilerMarker RefineMeshStep = new(nameof(UnsafeTriangulator<T, T2, TBig, TTransform, TUtils>.RefineMeshStep));
+        }
+
         private static readonly TUtils utils = default;
 
         static readonly ProfilerMarker MarkerPreProcessInputStep = new($"{nameof(PreProcessInputStep)}");
@@ -578,7 +590,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
         private void PreProcessInputStep(InputData<T2> input, OutputData<T2> output, Args args, out NativeArray<T2> localHoles, out TTransform lt, Allocator allocator)
         {
-            using var _ = MarkerPreProcessInputStep.Auto();
+            using var _ = Markers.PreProcessInputStep.Auto();
 
             var localPositions = output.Positions;
             localPositions.ResizeUninitialized(input.Positions.Length);
@@ -610,14 +622,16 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
         private void PostProcessInputStep(OutputData<T2> output, Args args, TTransform lt)
         {
-            if (args.Preprocessor != Preprocessor.None)
+            if (args.Preprocessor == Preprocessor.None)
             {
-                using var _ = MarkerPostProcessInputStep.Auto();
-                var inverse = lt.Inverse();
-                for (int i = 0; i < output.Positions.Length; i++)
-                {
-                    output.Positions[i] = inverse.Transform(output.Positions[i]);
-                }
+                return;
+            }
+
+            using var _ = Markers.PostProcessInputStep.Auto();
+            var inverse = lt.Inverse();
+            for (int i = 0; i < output.Positions.Length; i++)
+            {
+                output.Positions[i] = inverse.Transform(output.Positions[i]);
             }
         }
 
@@ -643,7 +657,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     return;
                 }
 
-                using var _ = MarkerValidateInputStep.Auto();
+                using var _ = Markers.ValidateInputStep.Auto();
 
                 if (positions.Length < 3)
                 {
@@ -817,12 +831,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public void Execute(Allocator allocator)
             {
-                using var _ = MarkerDelaunayTriangulationStep.Auto();
-
                 if (status.Value.IsError)
                 {
                     return;
                 }
+
+                using var _ = Markers.DelaunayTriangulationStep.Auto();
 
                 var n = positions.Length;
                 var maxTriangles = math.max(2 * n - 5, 0);
@@ -893,16 +907,17 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     }
                 }
 
-                // Vertex closest to p1 and p2, as measured by the circumscribed circle radius of p1, p2, p3
-                // Thus (p1,p2,p3) form a triangle close to the center of the point set, and it's guaranteed that there
-                // are no other vertices inside this triangle.
-                var p2 = positions[i2];
-
-                if (minRadius.CompareTo(utils.MaxValue()) == 0)
+                // NOTE: Since `int` does not support NaN or infinity, a circumcenter check is required for int2 validation.
+                if (i2 == int.MaxValue || math.any(utils.eq(utils.CircumCenter(p0, p1, positions[i2]), utils.MaxValue2())))
                 {
                     status.Value = Status.DegenerateInput;
                     return;
                 }
+
+                // Vertex closest to p1 and p2, as measured by the circumscribed circle radius of p1, p2, p3
+                // Thus (p1,p2,p3) form a triangle close to the center of the point set, and it's guaranteed that there
+                // are no other vertices inside this triangle.
+                var p2 = positions[i2];
 
                 // Swap the order of the vertices if the triangle is not oriented in the right direction
                 if (utils.less(Orient2dFast(p0, p1, p2), utils.ZeroTBig()))
@@ -913,6 +928,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
                 // Sort all other vertices by their distance to the circumcenter of the initial triangle
                 var c = utils.CircumCenter(p0, p1, p2);
+
                 for (int i = 0; i < positions.Length; i++)
                 {
                     dists[i] = utils.distancesq(c, positions[i]);
@@ -1199,12 +1215,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public void Execute(Allocator allocator)
             {
-                using var _ = MarkerConstrainEdgesStep.Auto();
-
                 if (!inputConstraintEdges.IsCreated || status.Value.IsError)
                 {
                     return;
                 }
+
+                using var _ = Markers.ConstrainEdgesStep.Auto();
 
                 using var _intersections = intersections = new NativeList<int>(allocator);
                 using var _unresolvedIntersections = unresolvedIntersections = new NativeList<int>(allocator);
@@ -1615,12 +1631,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public void Execute(Allocator allocator, bool constraintsIsCreated)
             {
-                using var _ = MarkerPlantingSeedStep.Auto();
-
                 if (!constraintsIsCreated || status.IsCreated && status.Value.IsError)
                 {
                     return;
                 }
+
+                using var _ = Markers.PlantingSeedStep.Auto();
 
                 shouldRemoveTriangle = new(triangles.Length / 3, allocator);
                 trianglesQueue = new(allocator);
@@ -1805,9 +1821,8 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             {
                 public readonly T2 Center;
                 public readonly T RadiusSq;
-                private readonly T offset;
-                public Circle(T2 center, T radiusSq) => (Center, RadiusSq, offset) = (center, radiusSq, default);
-                public Circle((T2 center, T radiusSq) circle) => (Center, RadiusSq, offset) = (circle.center, circle.radiusSq, default);
+                public Circle(T2 center, T radiusSq) => (Center, RadiusSq) = (center, radiusSq);
+                public Circle((T2 center, T radiusSq) circle) => (Center, RadiusSq) = (circle.center, circle.radiusSq);
             }
 
             private NativeReference<Status> status;
@@ -1861,12 +1876,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public void Execute(Allocator allocator, bool refineMesh, bool constrainBoundary)
             {
-                using var _ = MarkerRefineMeshStep.Auto();
-
                 if (!refineMesh || status.IsCreated && status.Value.IsError)
                 {
                     return;
                 }
+
+                using var _ = Markers.RefineMeshStep.Auto();
 
                 if (!utils.SupportsRefinement())
                 {
