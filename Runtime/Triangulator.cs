@@ -906,7 +906,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 using var _hullNext = hullNext = new(n, allocator);
                 using var _hullTri = hullTri = new(n, allocator);
                 using var _hullHash = hullHash = new(hashSize, allocator);
-                using var _EDGE_STACK = EDGE_STACK = new(512, allocator);
+                using var _EDGE_STACK = EDGE_STACK = new(math.min(maxTriangles, 512), allocator);
 
                 // Vertex closest to p1 and p2, as measured by the circumscribed circle radius of p1, p2, p3
                 // Thus (p1,p2,p3) form a triangle close to the center of the point set, and it's guaranteed that there
