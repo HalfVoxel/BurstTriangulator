@@ -955,9 +955,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
                     // Find a visible edge on the convex hull using edge hash
                     var start = 0;
+                    var key = utils.hashkey(p, c, hashSize);
                     for (var j = 0; j < hashSize; j++)
                     {
-                        var key = utils.hashkey(p, c, hashSize);
                         start = hullHash[(key + j) % hashSize];
                         if (start != -1 && start != hullNext[start]) break;
                     }
