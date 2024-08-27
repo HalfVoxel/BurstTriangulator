@@ -908,6 +908,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 }
 
                 // NOTE: Since `int` does not support NaN or infinity, a circumcenter check is required for int2 validation.
+                // The CircumRadiusSq calculation may have overflowed and returned garbage values.
                 if (i2 == int.MaxValue || math.any(utils.eq(utils.CircumCenter(p0, p1, positions[i2]), utils.MaxValue2())))
                 {
                     status.Value = Status.DegenerateInput;
