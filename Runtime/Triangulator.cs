@@ -534,14 +534,6 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
         private static readonly TUtils utils = default;
 
-        static readonly ProfilerMarker MarkerPreProcessInputStep = new($"{nameof(PreProcessInputStep)}");
-        static readonly ProfilerMarker MarkerPostProcessInputStep = new($"{nameof(PostProcessInputStep)}");
-        static readonly ProfilerMarker MarkerValidateInputStep = new($"{nameof(ValidateInputStep)}");
-        static readonly ProfilerMarker MarkerDelaunayTriangulationStep = new($"{nameof(DelaunayTriangulationStep)}");
-        static readonly ProfilerMarker MarkerConstrainEdgesStep = new($"{nameof(ConstrainEdgesStep)}");
-        static readonly ProfilerMarker MarkerPlantingSeedStep = new($"{nameof(PlantingSeedStep)}");
-        static readonly ProfilerMarker MarkerRefineMeshStep = new($"{nameof(RefineMeshStep)}");
-
         public void Triangulate(InputData<T2> input, OutputData<T2> output, Args args, Allocator allocator)
         {
             var tmpStatus = default(NativeReference<Status>);
