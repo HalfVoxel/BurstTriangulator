@@ -5,7 +5,9 @@
       "dest": "api",
       "allowCompilationErrors": true,
       "memberLayout": "separatePages",
-      "references": "dlls/*"
+      "enumSortOrder": "declaringOrder",
+      "references": "dlls/*",
+      "properties": { "DefineConstants": "UNITY_MATHEMATICS_FIXEDPOINT" }
     }
   ],
   "build": {
