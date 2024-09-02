@@ -1644,7 +1644,10 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             }));
             Assert.That(triangulator.Output.ConstrainedHalfedges.AsArray(), Is.EqualTo(new[]
             {
-                false, false, false, false, false, false, false, false, false, false, false, false,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.Unconstrained,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.Unconstrained,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.Unconstrained,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.Unconstrained,
             }));
         }
 
@@ -1674,7 +1677,10 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             }));
             Assert.That(triangulator.Output.ConstrainedHalfedges.AsArray(), Is.EqualTo(new[]
             {
-                false, true, false, false, false, false, false, false, false, false, true, false,
+                HalfedgeState.Unconstrained, HalfedgeState.ConstrainedAndHoleBoundary, HalfedgeState.Unconstrained,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.Unconstrained,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.Unconstrained,
+                HalfedgeState.Unconstrained, HalfedgeState.ConstrainedAndHoleBoundary, HalfedgeState.Unconstrained,
             }));
         }
 
@@ -1709,9 +1715,85 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             }));
             Assert.That(triangulator.Output.ConstrainedHalfedges.AsArray(), Is.EqualTo(new[]
             {
-                false, false, true, false, false, true,
-                false, false, true, false, true, false,
-                true, false, false, false, true, false,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.ConstrainedAndHoleBoundary,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.ConstrainedAndHoleBoundary,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.ConstrainedAndHoleBoundary,
+                HalfedgeState.Unconstrained, HalfedgeState.ConstrainedAndHoleBoundary, HalfedgeState.Unconstrained,
+                HalfedgeState.ConstrainedAndHoleBoundary, HalfedgeState.Unconstrained, HalfedgeState.Unconstrained,
+                HalfedgeState.Unconstrained, HalfedgeState.ConstrainedAndHoleBoundary, HalfedgeState.Unconstrained,
+            }));
+        }
+
+        [Test]
+        public void HalfedgesForConstrainedDelaunayTriangulationWithAutoHolesTest()
+        {
+            //
+            //  3 -----2
+            //  |     /5
+            //  |    / | \
+            //  |   /  |  6
+            //  |  /   | /
+            //  | /    4
+            //  0 -----1
+            //
+            using var positions = new NativeArray<T>(new float2[]
+            {
+                math.float2(0, 0),
+                math.float2(10, 0),
+                math.float2(10, 10),
+                math.float2(0, 10),
+                math.float2(10, 2),
+                math.float2(10, 8),
+                math.float2(15, 5),
+            }.DynamicCast<T>(), Allocator.Persistent);
+            using var constraints = new NativeArray<int>(new[]
+            {
+                0, 1,
+                1, 4,
+                4, 5,
+                5, 2,
+                2, 3,
+                3, 0,
+                0, 2,
+                4, 6,
+                6, 5,
+            }, Allocator.Persistent);
+            using var constraintTypes = new NativeArray<ConstraintType>(new[]
+            {
+                ConstraintType.ConstrainedAndHoleBoundary,
+                ConstraintType.ConstrainedAndHoleBoundary,
+                ConstraintType.Constrained,
+                ConstraintType.ConstrainedAndHoleBoundary,
+                ConstraintType.ConstrainedAndHoleBoundary,
+                ConstraintType.ConstrainedAndHoleBoundary,
+                ConstraintType.Constrained,
+                ConstraintType.ConstrainedAndHoleBoundary,
+                ConstraintType.ConstrainedAndHoleBoundary,
+            }, Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(Allocator.Persistent)
+            {
+                Input = { Positions = positions, ConstraintEdges = constraints, ConstraintEdgeTypes = constraintTypes },
+                Settings = { AutoHolesAndBoundary = true, },
+            };
+
+            triangulator.Run();
+            triangulator.Draw(color: Color.green);
+
+            Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(new int[]
+            {
+                4, 5, 6, 1, 0, 4, 4, 0, 5, 0, 3, 2, 0, 2, 5
+            }).Using(TrianglesComparer.Instance));
+            Assert.That(triangulator.Output.Halfedges.AsArray(), Is.EqualTo(new[]
+            {
+                8, -1, -1, -1, 6, -1, 4, 14, 0, -1, -1, 12, 11, -1, 7,
+            }));
+            Assert.That(triangulator.Output.ConstrainedHalfedges.AsArray(), Is.EqualTo(new[]
+            {
+                HalfedgeState.Constrained, HalfedgeState.ConstrainedAndHoleBoundary, HalfedgeState.ConstrainedAndHoleBoundary,
+                HalfedgeState.ConstrainedAndHoleBoundary, HalfedgeState.Unconstrained, HalfedgeState.ConstrainedAndHoleBoundary,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.Constrained,
+                HalfedgeState.ConstrainedAndHoleBoundary, HalfedgeState.ConstrainedAndHoleBoundary,HalfedgeState.Constrained,
+                HalfedgeState.Constrained, HalfedgeState.ConstrainedAndHoleBoundary, HalfedgeState.Unconstrained,
             }));
         }
 

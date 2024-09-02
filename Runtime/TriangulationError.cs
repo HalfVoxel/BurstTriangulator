@@ -25,6 +25,7 @@ namespace andywiecko.BurstTriangulator
         public static Status DegenerateInput => new Status { type = TriangulatorErrorType.DegenerateInput };
         public static Status SloanMaxItersExceeded => new Status { type = TriangulatorErrorType.SloanMaxItersExceeded };
         public static Status IntegersDoNotSupportMeshRefinement => new Status { type = TriangulatorErrorType.IntegersDoNotSupportMeshRefinement };
+        public static Status ConstraintArrayLengthMismatch(int constraintLength, int constraintTypeLength) => new Status { value1 = constraintLength, value2 = constraintTypeLength, type = TriangulatorErrorType.ConstraintArrayLengthMismatch };
 
 #if UNITY_EDITOR
         internal FixedString512Bytes ToFixedString() {
@@ -53,6 +54,8 @@ namespace andywiecko.BurstTriangulator
                      return $"Sloan max iterations exceeded! This usually happens when the scale of the input positions is not uniform. Try to pre-process the input data or increase {nameof(TriangulationSettings.SloanMaxIters)}.";
                 case TriangulatorErrorType.IntegersDoNotSupportMeshRefinement:
                     return "Integer coordinates do not support mesh refinement. Please use float or double coordinates.";
+                case TriangulatorErrorType.ConstraintArrayLengthMismatch:
+                    return $"Constraint type array's length ({value2}) must be exactly half of the constraint array's length ({value1}).";
                 default:
                     return "Unknown error.";
             }
@@ -78,6 +81,7 @@ namespace andywiecko.BurstTriangulator
         ConstraintIntersection,
         DegenerateInput,
         SloanMaxItersExceeded,
-        IntegersDoNotSupportMeshRefinement
+        IntegersDoNotSupportMeshRefinement,
+        ConstraintArrayLengthMismatch,
     }
 }

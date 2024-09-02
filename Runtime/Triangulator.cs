@@ -110,10 +110,45 @@ namespace andywiecko.BurstTriangulator
         public Preprocessor Preprocessor { get; set; } = Preprocessor.None;
     }
 
+    public enum ConstraintType: byte {
+        /// <summary>
+        /// A constrained edge will always be present in the output mesh.
+        ///
+        /// In rare cases where a vertex lies exactly on the constraint, this exact edge may not be present, but it may have been split up into smaller
+        /// edges that together form the original constraint.
+        /// </summary>
+        Constrained,
+        /// <summary>
+        /// A hole boundary edge works like a constrained edge, but will additionally define where the holes/boundaries of the mesh are.
+        ///
+        /// This applies when using the <see cref="TriangulationSettings.AutoHolesAndBoundary"/> or <see cref="TriangulationSettings.RestoreBoundary"/> setting.
+        ///
+        /// Boundary constraints must form closed loops. If they do not, the result is not well-defined.
+        ///
+        /// If a boundary constraint overlaps and is collinear with another non-boundary constraint, then the boundary constraint will take precedence.
+        /// </summary>
+        ConstrainedAndHoleBoundary,
+    }
+
+    public enum HalfedgeState: byte {
+        Unconstrained,
+        Constrained,
+        ConstrainedAndHoleBoundary,
+    }
+
     public class InputData<T2> where T2 : unmanaged
     {
         public NativeArray<T2> Positions { get; set; }
         public NativeArray<int> ConstraintEdges { get; set; }
+
+        /// <summary>
+        /// An array of <see cref="ConstraintType"/> values corresponding to each edge in <see cref="ConstraintEdges"/>.
+        ///
+        /// If created, the length must be exactly half of the length of <see cref="ConstraintEdges"/>.
+        ///
+        /// If not set, all constraints will be treated as <see cref="ConstraintType.ConstrainedAndHoleBoundary"/>.
+        /// </summary>
+        public NativeArray<ConstraintType> ConstraintEdgeTypes { get; set; }
         public NativeArray<T2> HoleSeeds { get; set; }
     }
 
@@ -142,7 +177,7 @@ namespace andywiecko.BurstTriangulator
         public NativeList<int> Triangles => owner.triangles;
         public NativeReference<Status> Status => owner.status;
         public NativeList<int> Halfedges => owner.halfedges;
-        public NativeList<bool> ConstrainedHalfedges => owner.constrainedHalfedges;
+        public NativeList<HalfedgeState> ConstrainedHalfedges => owner.constrainedHalfedges;
         private readonly Triangulator<T2> owner;
         public OutputData(Triangulator<T2> owner) => this.owner = owner;
     }
@@ -208,7 +243,7 @@ namespace andywiecko.BurstTriangulator
         internal NativeList<T2> outputPositions;
         internal NativeList<int> triangles;
         internal NativeList<int> halfedges;
-        internal NativeList<bool> constrainedHalfedges;
+        internal NativeList<HalfedgeState> constrainedHalfedges;
         internal NativeReference<Status> status;
 
         public Triangulator(int capacity, Allocator allocator)
@@ -288,13 +323,13 @@ namespace andywiecko.BurstTriangulator
 
         public static void Run(this Triangulator<Vector2> @this) =>
             new TriangulationJob<float, float2, float, TransformFloat, FloatUtils>(
-                input: new() { Positions = @this.Input.Positions.Reinterpret<float2>(), ConstraintEdges = @this.Input.ConstraintEdges, HoleSeeds = @this.Input.HoleSeeds.Reinterpret<float2>() },
+                input: new() { Positions = @this.Input.Positions.Reinterpret<float2>(), ConstraintEdges = @this.Input.ConstraintEdges, ConstraintEdgeTypes = @this.Input.ConstraintEdgeTypes, HoleSeeds = @this.Input.HoleSeeds.Reinterpret<float2>() },
                 output: new() { Triangles = @this.triangles, Halfedges = @this.halfedges, Positions = UnsafeUtility.As<NativeList<Vector2>, NativeList<float2>>(ref @this.outputPositions), Status = @this.status, ConstrainedHalfedges = @this.constrainedHalfedges },
                 args: @this.Settings
         ).Run();
         public static JobHandle Schedule(this Triangulator<Vector2> @this, JobHandle dependencies = default) =>
             new TriangulationJob<float, float2, float, TransformFloat, FloatUtils>(
-                input: new() { Positions = @this.Input.Positions.Reinterpret<float2>(), ConstraintEdges = @this.Input.ConstraintEdges, HoleSeeds = @this.Input.HoleSeeds.Reinterpret<float2>() },
+                input: new() { Positions = @this.Input.Positions.Reinterpret<float2>(), ConstraintEdges = @this.Input.ConstraintEdges, ConstraintEdgeTypes = @this.Input.ConstraintEdgeTypes, HoleSeeds = @this.Input.HoleSeeds.Reinterpret<float2>() },
                 output: new() { Triangles = @this.triangles, Halfedges = @this.halfedges, Positions = UnsafeUtility.As<NativeList<Vector2>, NativeList<float2>>(ref @this.outputPositions), Status = @this.status, ConstrainedHalfedges = @this.constrainedHalfedges },
                 args: @this.Settings
         ).Schedule(dependencies);
@@ -324,6 +359,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
     {
         public NativeArray<T2> Positions;
         public NativeArray<int> ConstraintEdges;
+        public NativeArray<ConstraintType> ConstraintEdgeTypes;
         public NativeArray<T2> HoleSeeds;
     }
 
@@ -333,7 +369,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         public NativeList<int> Triangles;
         public NativeReference<Status> Status;
         public NativeList<int> Halfedges;
-        public NativeList<bool> ConstrainedHalfedges;
+        public NativeList<HalfedgeState> ConstrainedHalfedges;
     }
 
     public readonly struct Args
@@ -470,12 +506,14 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         [NativeDisableContainerSafetyRestriction]
         private NativeArray<int> constraints;
         [NativeDisableContainerSafetyRestriction]
+        private NativeArray<ConstraintType> constraintTypes;
+        [NativeDisableContainerSafetyRestriction]
         private NativeArray<T2> holeSeeds;
 
         private NativeList<T2> outputPositions;
         private NativeList<int> triangles;
         private NativeList<int> halfedges;
-        private NativeList<bool> constrainedHalfedges;
+        private NativeList<HalfedgeState> constrainedHalfedges;
         private NativeReference<Status> status;
 
         private readonly Args args;
@@ -484,6 +522,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         {
             inputPositions = input.Positions;
             constraints = input.ConstraintEdges;
+            constraintTypes = input.ConstraintEdgeTypes;
             holeSeeds = input.HoleSeeds;
 
             outputPositions = output.Positions;
@@ -499,6 +538,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         {
             inputPositions = @this.Input.Positions;
             constraints = @this.Input.ConstraintEdges;
+            constraintTypes = @this.Input.ConstraintEdgeTypes;
             holeSeeds = @this.Input.HoleSeeds;
 
             outputPositions = @this.Output.Positions;
@@ -517,6 +557,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 {
                     Positions = inputPositions,
                     ConstraintEdges = constraints,
+                    ConstraintEdgeTypes = constraintTypes,
                     HoleSeeds = holeSeeds,
                 },
                 output: new()
@@ -556,7 +597,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             var tmpStatus = default(NativeReference<Status>);
             var tmpPositions = default(NativeList<T2>);
             var tmpHalfedges = default(NativeList<int>);
-            var tmpConstrainedHalfedges = default(NativeList<bool>);
+            var tmpConstrainedHalfedges = default(NativeList<HalfedgeState>);
             if (!output.Status.IsCreated) output.Status = tmpStatus = new(allocator);
             if (!output.Positions.IsCreated) output.Positions = tmpPositions = new(16 * 1024, allocator);
             if (!output.Halfedges.IsCreated) output.Halfedges = tmpHalfedges = new(6 * 16 * 1024, allocator);
@@ -650,6 +691,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private NativeReference<Status> status;
             private readonly Args args;
             private NativeArray<int>.ReadOnly constraints;
+            private NativeArray<ConstraintType>.ReadOnly constraintTypes;
 
             public ValidateInputStep(InputData<T2> input, OutputData<T2> output, Args args)
             {
@@ -657,6 +699,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 status = output.Status;
                 this.args = args;
                 constraints = input.ConstraintEdges.AsReadOnly();
+                constraintTypes = input.ConstraintEdgeTypes.AsReadOnly();
             }
 
             public void Execute()
@@ -671,6 +714,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 if (positions.Length < 3)
                 {
                     status.Value = Status.PositionsLengthLessThan3(positions.Length);
+                    return;
                 }
 
                 for (int i = 0; i < positions.Length; i++)
@@ -695,6 +739,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 if (constraints.Length % 2 == 1)
                 {
                     status.Value = Status.ConstraintsLengthNotDivisibleBy2(constraints.Length);
+                    return;
+                }
+
+                if (constraintTypes.IsCreated && constraintTypes.Length*2 != constraints.Length)
+                {
+                    status.Value = Status.ConstraintArrayLengthMismatch(constraints.Length, constraintTypes.Length);
                     return;
                 }
 
@@ -809,7 +859,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private NativeArray<T2>.ReadOnly positions;
             private NativeList<int> triangles;
             private NativeList<int> halfedges;
-            private NativeList<bool> constrainedHalfedges;
+            private NativeList<HalfedgeState> constrainedHalfedges;
             private NativeArray<int> hullNext, hullPrev, hullTri, hullHash;
             private NativeArray<int> EDGE_STACK;
 
@@ -1182,6 +1232,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private NativeArray<T2>.ReadOnly positions;
             private NativeArray<int> triangles;
             private NativeArray<int>.ReadOnly inputConstraintEdges;
+            private NativeArray<ConstraintType>.ReadOnly inputConstraintEdgeTypes;
             /// <summary>
             /// There are 3 halfedges per triangle. For a triangle ABC, the halfedges are A->B, B->C, and C->A.
             ///
@@ -1197,7 +1248,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             //
             // See the `UsingTempAllocatorInJobTest` to learn more.
             private NativeList<int> halfedges;
-            private NativeList<bool> constrainedHalfedges;
+            private NativeList<HalfedgeState> constrainedHalfedges;
             private readonly Args args;
 
             private NativeList<int> intersections;
@@ -1215,6 +1266,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 positions = output.Positions.AsReadOnly();
                 triangles = output.Triangles.AsArray();
                 inputConstraintEdges = input.ConstraintEdges.AsReadOnly();
+                inputConstraintEdgeTypes = input.ConstraintEdgeTypes.AsReadOnly();
                 halfedges = output.Halfedges;
                 constrainedHalfedges = output.ConstrainedHalfedges;
                 this.args = args;
@@ -1250,11 +1302,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                         inputConstraintEdges[2 * index + 1]
                     );
                     c = c.x < c.y ? c.xy : c.yx; // Backward compatibility. To remove in the future.
-                    TryApplyConstraint(c);
+                    var type = inputConstraintEdgeTypes.IsCreated ? inputConstraintEdgeTypes[index] : ConstraintType.ConstrainedAndHoleBoundary;
+                    TryApplyConstraint(c, type == ConstraintType.Constrained ? HalfedgeState.Constrained : HalfedgeState.ConstrainedAndHoleBoundary);
                 }
             }
 
-            private void TryResolveIntersections(int2 c, ref int iter)
+            private void TryResolveIntersections(int2 c, HalfedgeState constrainValue, ref int iter)
             {
                 for (int i = 0; i < intersections.Length; i++)
                 {
@@ -1358,8 +1411,8 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     {
                         constrainedHalfedges[h0p] = constrainedHalfedges[h5];
                     }
-                    constrainedHalfedges[h2] = false;
-                    constrainedHalfedges[h5] = false;
+                    constrainedHalfedges[h2] = HalfedgeState.Unconstrained;
+                    constrainedHalfedges[h5] = HalfedgeState.Unconstrained;
 
                     // Fix intersections
                     for (int j = i + 1; j < intersections.Length; j++)
@@ -1376,8 +1429,8 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     var swapped = math.int2(_p, _q);
                     if (math.all(c.xy == swapped.xy) || math.all(c.xy == swapped.yx))
                     {
-                        constrainedHalfedges[h2] = true;
-                        constrainedHalfedges[h5] = true;
+                        constrainedHalfedges[h2] = constrainValue;
+                        constrainedHalfedges[h5] = constrainValue;
                     }
                     if (EdgeEdgeIntersection(c, swapped))
                     {
@@ -1395,17 +1448,19 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 return !(math.any(e1.xy == e2.xy | e1.xy == e2.yx)) && UnsafeTriangulator<T, T2, TBig, TTransform, TUtils>.EdgeEdgeIntersection(a0, a1, b0, b1);
             }
 
-            void MarkHalfedgeConstrained(int halfedge)
+            void MarkHalfedgeConstrained(int halfedge, HalfedgeState constrainValue)
             {
-                constrainedHalfedges[halfedge] = true;
+                // If two constraints overlap, the one which is more constrained is used
+                constrainValue = (HalfedgeState)math.max((int)constrainedHalfedges[halfedge], (int)constrainValue);
+                constrainedHalfedges[halfedge] = constrainValue;
                 var oh = halfedges[halfedge];
                 if (oh != -1)
                 {
-                    constrainedHalfedges[oh] = true;
+                    constrainedHalfedges[oh] = constrainValue;
                 }
             }
 
-            private void TryApplyConstraint(int2 edge)
+            private void TryApplyConstraint(int2 edge, HalfedgeState constrainValue)
             {
                 intersections.Clear();
                 unresolvedIntersections.Clear();
@@ -1443,7 +1498,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     var h1 = NextHalfedge(h0);
                     if (triangles[h1] == cj)
                     {
-                        MarkHalfedgeConstrained(h0);
+                        MarkHalfedgeConstrained(h0, constrainValue);
                         break;
                     }
                     var h2 = NextHalfedge(h1);
@@ -1451,13 +1506,13 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     if (PointLineSegmentIntersection(positions[triangles[h1]], positions[ci], positions[cj])) {
                         // h1 lies on the edge ci-cj, split the constraint
                         // Note: h1 and h2 cannot both lie on the constraint, since that would mean that the triangle h0,h1,h2 is degenerate
-                        MarkHalfedgeConstrained(h0);
+                        MarkHalfedgeConstrained(h0, constrainValue);
                         cj = triangles[h1];
                         break;
                     }
                     if (PointLineSegmentIntersection(positions[triangles[h2]], positions[ci], positions[cj]) && triangles[h2] != cj) {
                         // h2 lies on the edge ci-cj, split the constraint
-                        MarkHalfedgeConstrained(h2);
+                        MarkHalfedgeConstrained(h2, constrainValue);
                         cj = triangles[h2];
                         break;
                     }
@@ -1475,7 +1530,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     {
                         if (triangles[h2] == cj)
                         {
-                            constrainedHalfedges[h2] = true;
+                            MarkHalfedgeConstrained(h2, constrainValue);
                         }
 
                         // possible that triangles[h2] == cj, not need to check
@@ -1493,20 +1548,20 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                         var h1 = NextHalfedge(h0);
                         if (triangles[h1] == cj)
                         {
-                            MarkHalfedgeConstrained(h0);
+                            MarkHalfedgeConstrained(h0, constrainValue);
                             break;
                         }
                         var h2 = NextHalfedge(h1);
 
                         if (PointLineSegmentIntersection(positions[triangles[h1]], positions[ci], positions[cj])) {
                             // h1 lies on the edge ci-cj, split the constraint
-                            MarkHalfedgeConstrained(h0);
+                            MarkHalfedgeConstrained(h0, constrainValue);
                             cj = triangles[h1];
                             break;
                         }
                         if (PointLineSegmentIntersection(positions[triangles[h2]], positions[ci], positions[cj]) && triangles[h2] != cj) {
                             // h2 lies on the edge ci-cj, split the constraint
-                            MarkHalfedgeConstrained(h2);
+                            MarkHalfedgeConstrained(h2, constrainValue);
                             cj = triangles[h2];
                             break;
                         }
@@ -1586,13 +1641,13 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     }
 
                     (intersections, unresolvedIntersections) = (unresolvedIntersections, intersections);
-                    TryResolveIntersections(new int2(ci, cj), ref iter);
+                    TryResolveIntersections(new int2(ci, cj), constrainValue, ref iter);
                 } while (!unresolvedIntersections.IsEmpty);
 
                 // If the constraint was split, continue with the remaining part
                 if (edge.y != cj)
                 {
-                    TryApplyConstraint(new int2(cj, edge.y));
+                    TryApplyConstraint(new int2(cj, edge.y), constrainValue);
                 }
             }
 
@@ -1613,7 +1668,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private NativeList<int> triangles;
             [ReadOnly]
             private NativeList<T2> positions;
-            private NativeList<bool> constrainedHalfedges;
+            private NativeList<HalfedgeState> constrainedHalfedges;
             private NativeList<int> halfedges;
 
             private NativeArray<bool> shouldRemoveTriangle;
@@ -1665,7 +1720,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 {
                     if (halfedges[he] == -1 &&
                         !shouldRemoveTriangle[he / 3] &&
-                        !constrainedHalfedges[he])
+                        constrainedHalfedges[he] != HalfedgeState.ConstrainedAndHoleBoundary)
                     {
                         PlantSeed(he / 3);
                     }
@@ -1738,14 +1793,14 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 anyRemovedTriangles = true;
 
                 // Search outwards from the seed triangle and mark all triangles
-                // until we get to a constrained edge, or a previously visited triangle.
+                // until we get to a hole boundary, or a previously visited triangle.
                 while (trianglesQueue.TryDequeue(out tId))
                 {
                     for (int i = 0; i < 3; i++)
                     {
                         var he = 3 * tId + i;
                         var ohe = halfedges[he];
-                        if (constrainedHalfedges[he] || ohe == -1)
+                        if (constrainedHalfedges[he] == HalfedgeState.ConstrainedAndHoleBoundary || ohe == -1)
                         {
                             continue;
                         }
@@ -1787,7 +1842,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 {
                     for (int i = 0; i < 3; i++) {
                         if (halfedges[3*tId + i] == -1) {
-                            (constrainedHalfedges[3*tId + i] ? nextQueue : queue).Enqueue(tId);
+                            (constrainedHalfedges[3*tId + i] == HalfedgeState.ConstrainedAndHoleBoundary ? nextQueue : queue).Enqueue(tId);
                             visitedTriangles[tId] = true;
                             break;
                         }
@@ -1795,7 +1850,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 }
 
                 // Search inwards from the boundary
-                // When crossing a constrained edge, we flip between removing triangles and keeping triangles
+                // When crossing a hole bondary, we flip between removing triangles and keeping triangles
                 // This effectively implements the EvenOdd fill mode (https://en.wikipedia.org/wiki/Even%E2%80%93odd_rule).
                 bool anyRemovedTriangles = false;
                 for (bool remove = true; !queue.IsEmpty() || !nextQueue.IsEmpty(); remove = !remove) {
@@ -1810,7 +1865,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                             var ohe = halfedges[he];
                             var oTri = ohe / 3;
                             if (ohe != -1 && !visitedTriangles[oTri]) {
-                                (constrainedHalfedges[he] ? nextQueue : queue).Enqueue(oTri);
+                                (constrainedHalfedges[he] == HalfedgeState.ConstrainedAndHoleBoundary ? nextQueue : queue).Enqueue(oTri);
                                 visitedTriangles[oTri] = true;
                             }
                         }
@@ -1839,7 +1894,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private NativeList<int> triangles;
             private NativeList<T2> outputPositions;
             private NativeList<int> halfedges;
-            private NativeList<bool> constrainedHalfedges;
+            private NativeList<HalfedgeState> constrainedHalfedges;
 
             private NativeList<Circle> circles;
             private NativeQueue<int> trianglesQueue;
@@ -1903,7 +1958,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 {
                     for (int he = 0; he < constrainedHalfedges.Length; he++)
                     {
-                        constrainedHalfedges[he] = halfedges[he] == -1;
+                        constrainedHalfedges[he] = halfedges[he] == -1 ? HalfedgeState.ConstrainedAndHoleBoundary : HalfedgeState.Unconstrained;
                     }
                 }
 
@@ -1926,7 +1981,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 // Collect encroached half-edges.
                 for (int he = 0; he < constrainedHalfedges.Length; he++)
                 {
-                    if (constrainedHalfedges[he] && IsEncroached(he))
+                    if (constrainedHalfedges[he] >= HalfedgeState.Constrained && IsEncroached(he))
                     {
                         heQueue.Add(he);
                     }
@@ -2002,11 +2057,11 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     p = i < initialPointsCount ? utils.lerp(e0, e1, alpha) : utils.lerp(e1, e0, alpha);
                 }
 
-                constrainedHalfedges[he] = false;
+                constrainedHalfedges[he] = HalfedgeState.Unconstrained;
                 var ohe = halfedges[he];
                 if (ohe != -1)
                 {
-                    constrainedHalfedges[ohe] = false;
+                    constrainedHalfedges[ohe] = HalfedgeState.Unconstrained;
                 }
 
                 if (halfedges[he] != -1)
@@ -2051,10 +2106,10 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                         heQueue.Add(ohj);
                     }
 
-                    constrainedHalfedges[hi] = true;
-                    constrainedHalfedges[ohi] = true;
-                    constrainedHalfedges[hj] = true;
-                    constrainedHalfedges[ohj] = true;
+                    constrainedHalfedges[hi] = HalfedgeState.Constrained;
+                    constrainedHalfedges[ohi] = HalfedgeState.Constrained;
+                    constrainedHalfedges[hj] = HalfedgeState.Constrained;
+                    constrainedHalfedges[ohj] = HalfedgeState.Constrained;
                 }
                 else
                 {
@@ -2075,8 +2130,8 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                         heQueue.Add(hj);
                     }
 
-                    constrainedHalfedges[hi] = true;
-                    constrainedHalfedges[hj] = true;
+                    constrainedHalfedges[hi] = HalfedgeState.Constrained;
+                    constrainedHalfedges[hj] = HalfedgeState.Constrained;
                 }
             }
 
@@ -2096,7 +2151,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
                 for (int he = 0; he < constrainedHalfedges.Length; he++)
                 {
-                    if (!constrainedHalfedges[he])
+                    if (constrainedHalfedges[he] == HalfedgeState.Unconstrained)
                     {
                         continue;
                     }
@@ -2196,7 +2251,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private void VisitEdge(T2 p, int t0)
             {
                 var he = halfedges[t0];
-                if (he == -1 || constrainedHalfedges[he])
+                if (he == -1 || constrainedHalfedges[he] >= HalfedgeState.Constrained)
                 {
                     return;
                 }
@@ -2408,7 +2463,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     }
                     else
                     {
-                        constrainedHalfedges[3 * i + 1 + heOffset] = true;
+                        constrainedHalfedges[3 * i + 1 + heOffset] = HalfedgeState.Constrained;
                     }
                     halfedges[3 * i + 2 + heOffset] = 3 * i + 3 + heOffset;
                     halfedges[3 * i + 3 + heOffset] = 3 * i + 2 + heOffset;
@@ -2422,7 +2477,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 }
                 else
                 {
-                    constrainedHalfedges[heOffset + 3 * (pathPoints.Length - 1) + 1] = true;
+                    constrainedHalfedges[heOffset + 3 * (pathPoints.Length - 1) + 1] = HalfedgeState.Constrained;
                 }
                 halfedges[heOffset] = heOffset + 3 * (pathPoints.Length - 1) + 2;
                 halfedges[heOffset + 3 * (pathPoints.Length - 1) + 2] = heOffset;
@@ -2432,7 +2487,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     for (int i = 0; i < pathPoints.Length - 1; i++)
                     {
                         var he = heOffset + 3 * i + 1;
-                        if (constrainedHalfedges[he] && IsEncroached(he))
+                        if (constrainedHalfedges[he] >= HalfedgeState.Constrained && IsEncroached(he))
                         {
                             heQueue.Add(he);
                         }
@@ -2473,7 +2528,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     }
                     else
                     {
-                        constrainedHalfedges[3 * i + 1 + heOffset] = true;
+                        constrainedHalfedges[3 * i + 1 + heOffset] = HalfedgeState.Constrained;
                     }
                     halfedges[3 * i + 2 + heOffset] = 3 * i + 3 + heOffset;
                     halfedges[3 * i + 3 + heOffset] = 3 * i + 2 + heOffset;
@@ -2488,7 +2543,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 }
                 else
                 {
-                    constrainedHalfedges[heOffset + 3 * (pathPoints.Length - 2) + 1] = true;
+                    constrainedHalfedges[heOffset + 3 * (pathPoints.Length - 2) + 1] = HalfedgeState.Constrained;
                 }
                 halfedges[heOffset] = -1;
                 halfedges[heOffset + 3 * (pathPoints.Length - 2) + 2] = -1;
@@ -2498,7 +2553,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     for (int i = 0; i < pathPoints.Length - 1; i++)
                     {
                         var he = heOffset + 3 * i + 1;
-                        if (constrainedHalfedges[he] && IsEncroached(he))
+                        if (constrainedHalfedges[he] >= HalfedgeState.Constrained && IsEncroached(he))
                         {
                             heQueue.Add(he);
                         }

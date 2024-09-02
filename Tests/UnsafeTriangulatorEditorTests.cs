@@ -172,7 +172,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             using var constraints = new NativeArray<int>(LakeSuperior.Constraints, Allocator.Persistent);
             using var holesSeeds = new NativeArray<T>(LakeSuperior.Holes.Scale(1000, typeof(T) == typeof(int2)).DynamicCast<T>(), Allocator.Persistent);
             using var triangles = new NativeList<int>(64, Allocator.Persistent);
-            using var constrainedHalfedges = new NativeList<bool>(64, Allocator.Persistent);
+            using var constrainedHalfedges = new NativeList<HalfedgeState>(64, Allocator.Persistent);
             using var triangulator = new Triangulator<T>(Allocator.Persistent)
             {
                 Input = { Positions = positions, ConstraintEdges = constraints, HoleSeeds = holesSeeds },
@@ -231,7 +231,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             using var triangles2 = new NativeList<int>(Allocator.Persistent);
             using var halfedges = new NativeList<int>(Allocator.Persistent);
-            using var constrainedHalfedges = new NativeList<bool>(Allocator.Persistent);
+            using var constrainedHalfedges = new NativeList<HalfedgeState>(Allocator.Persistent);
 
             t.Triangulate(input, new() { Triangles = triangles2, Halfedges = halfedges, ConstrainedHalfedges = constrainedHalfedges }, args.With(autoHolesAndBoundary: false), Allocator.Persistent);
             t.PlantHoleSeeds(input, new() { Triangles = triangles2, Halfedges = halfedges, ConstrainedHalfedges = constrainedHalfedges }, args.With(autoHolesAndBoundary: true), Allocator.Persistent);
@@ -257,7 +257,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             using var triangles2 = new NativeList<int>(Allocator.Persistent);
             using var halfedges = new NativeList<int>(Allocator.Persistent);
-            using var constrainedHalfedges = new NativeList<bool>(Allocator.Persistent);
+            using var constrainedHalfedges = new NativeList<HalfedgeState>(Allocator.Persistent);
 
             t.Triangulate(input, new() { Triangles = triangles2, Halfedges = halfedges, ConstrainedHalfedges = constrainedHalfedges }, args.With(restoreBoundary: false), Allocator.Persistent);
             t.PlantHoleSeeds(input, new() { Triangles = triangles2, Halfedges = halfedges, ConstrainedHalfedges = constrainedHalfedges }, args.With(restoreBoundary: true), Allocator.Persistent);
@@ -287,7 +287,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             using var triangles2 = new NativeList<int>(Allocator.Persistent);
             using var outputPositions = new NativeList<T>(Allocator.Persistent);
             using var halfedges = new NativeList<int>(Allocator.Persistent);
-            using var constrainedHalfedges = new NativeList<bool>(Allocator.Persistent);
+            using var constrainedHalfedges = new NativeList<HalfedgeState>(Allocator.Persistent);
 
             t.Triangulate(inputWithoutHoles, new() { Triangles = triangles2, Halfedges = halfedges, ConstrainedHalfedges = constrainedHalfedges, Positions = outputPositions }, args, Allocator.Persistent);
             t.PlantHoleSeeds(inputWithHoles, new() { Triangles = triangles2, Halfedges = halfedges, ConstrainedHalfedges = constrainedHalfedges, Positions = outputPositions }, args, Allocator.Persistent);
@@ -345,7 +345,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             using var triangles2 = new NativeList<int>(Allocator.Persistent);
             using var halfedges = new NativeList<int>(Allocator.Persistent);
-            using var constrainedHalfedges = new NativeList<bool>(Allocator.Persistent);
+            using var constrainedHalfedges = new NativeList<HalfedgeState>(Allocator.Persistent);
             using var outputPositions = new NativeList<T>(Allocator.Persistent);
             var output = new LowLevel.Unsafe.OutputData<T>
             {
@@ -378,7 +378,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             using var triangles2 = new NativeList<int>(Allocator.Persistent);
             using var halfedges = new NativeList<int>(Allocator.Persistent);
-            using var constrainedHalfedges = new NativeList<bool>(Allocator.Persistent);
+            using var constrainedHalfedges = new NativeList<HalfedgeState>(Allocator.Persistent);
             using var outputPositions = new NativeList<T>(Allocator.Persistent);
             var output = new LowLevel.Unsafe.OutputData<T>
             {
@@ -416,7 +416,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             using var triangles2 = new NativeList<int>(Allocator.Persistent);
             using var outputPositions = new NativeList<T>(Allocator.Persistent);
             using var halfedges = new NativeList<int>(Allocator.Persistent);
-            using var constrainedHalfedges = new NativeList<bool>(Allocator.Persistent);
+            using var constrainedHalfedges = new NativeList<HalfedgeState>(Allocator.Persistent);
             var output = new LowLevel.Unsafe.OutputData<T> { Triangles = triangles2, Halfedges = halfedges, ConstrainedHalfedges = constrainedHalfedges, Positions = outputPositions };
             t.Triangulate(inputWithoutHoles, output, args.With(refineMesh: false), Allocator.Persistent);
             t.PlantHoleSeeds(inputWithHoles, output, args, Allocator.Persistent);

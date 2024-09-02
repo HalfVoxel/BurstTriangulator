@@ -13,6 +13,7 @@ For online version see [Github Releases].
 - Improved error reporting, so you can now access information about the error via code, instead of just "there was an error".
 - Constraints passing through vertices is now acceptable input. If a constraint A->C passes through an input vertex B, then the constraint will be split up to behave identically to the two constraints A -> B and B -> C.
 - Fixed an inf loop that could happen in some cases when using `AutoHolesAndBoundary`.
+- Added an optional `ConstraintEdgeTypes` field to the input. This allows you to add a constraint, but without impacting where holes/boundaries are created (when using AutoHolesAndBoundary or RestoreBoundary).
 
 ## [3.2.0] – 2024-08-28
 
