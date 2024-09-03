@@ -4,7 +4,10 @@ using Unity.Mathematics;
 namespace andywiecko.BurstTriangulator
 {
     public struct Status {
+        // Allow unused fields outside the editor
+#pragma warning disable 0414
         int value1, value2, value3, value4;
+#pragma warning restore 0414
         public TriangulatorErrorType type;
 
 		/// <summary>
