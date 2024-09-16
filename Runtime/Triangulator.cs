@@ -1704,12 +1704,15 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
                 using var _ = Markers.PlantingSeedStep.Auto();
 
-                shouldRemoveTriangle = new(triangles.Length / 3, allocator);
-                trianglesQueue = new(allocator);
+                using var _shouldRemoveTriangle = shouldRemoveTriangle = new(triangles.Length / 3, allocator);
 
                 if (args.AutoHolesAndBoundary) PlantAuto(allocator);
-                if (holes.IsCreated) PlantHoleSeeds(holes);
-                if (args.RestoreBoundary) PlantBoundarySeeds();
+                if (holes.IsCreated || args.RestoreBoundary) {
+                    trianglesQueue = new(allocator);
+                    if (holes.IsCreated) PlantHoleSeeds(holes);
+                    if (args.RestoreBoundary) PlantBoundarySeeds();
+                    trianglesQueue.Dispose();
+                }
 
                 if (anyRemovedTriangles) Finish(allocator);
             }
