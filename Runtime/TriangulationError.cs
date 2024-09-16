@@ -29,6 +29,14 @@ namespace andywiecko.BurstTriangulator
         public static Status SloanMaxItersExceeded => new Status { type = TriangulatorErrorType.SloanMaxItersExceeded };
         public static Status IntegersDoNotSupportMeshRefinement => new Status { type = TriangulatorErrorType.IntegersDoNotSupportMeshRefinement };
         public static Status ConstraintArrayLengthMismatch(int constraintLength, int constraintTypeLength) => new Status { value1 = constraintLength, value2 = constraintTypeLength, type = TriangulatorErrorType.ConstraintArrayLengthMismatch };
+        public static Status HoleMustBeFinite(int index) => new Status { value1 = index, type = TriangulatorErrorType.HoleMustBeFinite };
+        public static Status RedudantHolesArray => new Status { type = TriangulatorErrorType.RedudantHolesArray };
+        public static Status ConstraintEdgesMissingForAutoHolesAndBoundary => new Status { type = TriangulatorErrorType.ConstraintEdgesMissingForAutoHolesAndBoundary };
+        public static Status ConstraintEdgesMissingForRestoreBoundary => new Status { type = TriangulatorErrorType.ConstraintEdgesMissingForRestoreBoundary };
+        public static Status RefinementNotSupportedForCoordinateType => new Status { type = TriangulatorErrorType.RefinementNotSupportedForCoordinateType };
+        public static Status SloanMaxItersMustBePositive(int sloanMaxIters) => new Status { type = TriangulatorErrorType.SloanMaxItersMustBePositive, value1 = sloanMaxIters };
+        public static Status RefinementThresholdAreaMustBePositive => new Status { type = TriangulatorErrorType.RefinementThresholdAreaMustBePositive };
+        public static Status RefinementThresholdAngleOutOfRange => new Status { type = TriangulatorErrorType.RefinementThresholdAngleOutOfRange };
 
 #if UNITY_EDITOR
         internal FixedString512Bytes ToFixedString() {
@@ -39,6 +47,8 @@ namespace andywiecko.BurstTriangulator
                     return $"Position array's length must be greater than 3, but was {value1}.";
                 case TriangulatorErrorType.PositionsMustBeFinite:
                     return $"Positions must be finite, but position at index {value1} is not finite.";
+                case TriangulatorErrorType.HoleMustBeFinite:
+                    return $"Hole must be finite, but hole at index {value1} is not finite.";
                 case TriangulatorErrorType.ConstraintsLengthNotDivisibleBy2:
                     return $"Input constraint array's length must be divisible by 2, but was {value1}.";
                 case TriangulatorErrorType.DuplicatePosition:
@@ -59,6 +69,20 @@ namespace andywiecko.BurstTriangulator
                     return "Integer coordinates do not support mesh refinement. Please use float or double coordinates.";
                 case TriangulatorErrorType.ConstraintArrayLengthMismatch:
                     return $"Constraint type array's length ({value2}) must be exactly half of the constraint array's length ({value1}).";
+                case TriangulatorErrorType.RedudantHolesArray:
+                    return "HoleSeeds buffer is provided, but ConstraintEdges is missing. Using holes requires constrained edges.";
+                case TriangulatorErrorType.ConstraintEdgesMissingForAutoHolesAndBoundary:
+                    return "ConstraintEdges buffer is missing. This is required when using the AutoHolesAndBoundary settings.";
+                case TriangulatorErrorType.ConstraintEdgesMissingForRestoreBoundary:
+                    return "ConstraintEdges buffer is missing. This is required when using the RestoreBoundary settings.";
+                case TriangulatorErrorType.RefinementNotSupportedForCoordinateType:
+                    return "Mesh refinement is not supported for the coordinate type T.";
+                case TriangulatorErrorType.SloanMaxItersMustBePositive:
+                    return $"Sloan max iterations must be positive. But found {value1}.";
+                case TriangulatorErrorType.RefinementThresholdAreaMustBePositive:
+                    return "Refinement threshold area must be positive.";
+                case TriangulatorErrorType.RefinementThresholdAngleOutOfRange:
+                    return "RefinementThresholdAngle must be in the range [0, π / 4]. Note that in the literature, the upper boundary for convergence is approximately π / 6.";
                 default:
                     return "Unknown error.";
             }
@@ -86,5 +110,13 @@ namespace andywiecko.BurstTriangulator
         SloanMaxItersExceeded,
         IntegersDoNotSupportMeshRefinement,
         ConstraintArrayLengthMismatch,
+        HoleMustBeFinite,
+        RedudantHolesArray,
+        ConstraintEdgesMissingForAutoHolesAndBoundary,
+        ConstraintEdgesMissingForRestoreBoundary,
+        RefinementNotSupportedForCoordinateType,
+        SloanMaxItersMustBePositive,
+        RefinementThresholdAreaMustBePositive,
+        RefinementThresholdAngleOutOfRange,
     }
 }

@@ -12,8 +12,22 @@ For online version see [Github Releases].
 - Removed the concentric shells parameter from the settings. It is now a hardcoded constant that should work well for all triangulations.
 - Improved error reporting, so you can now access information about the error via code, instead of just "there was an error".
 - Constraints passing through vertices is now acceptable input. If a constraint A->C passes through an input vertex B, then the constraint will be split up to behave identically to the two constraints A -> B and B -> C.
-- Fixed an inf loop that could happen in some cases when using `AutoHolesAndBoundary`.
 - Added an optional `ConstraintEdgeTypes` field to the input. This allows you to add a constraint, but without impacting where holes/boundaries are created (when using AutoHolesAndBoundary or RestoreBoundary).
+
+## [3.2.1] – 2024-09-03
+
+### Changed
+
+- Significant updates to the API documentation.
+- (Internal) Miscellaneous changes.
+
+### Deprecated
+
+- The `OutputData(Triangulator<T2>)` constructor is now obsolete. It will be made internal in future versions.
+
+### Fixed
+
+- Resolved a potential issue causing an infinite loop during the `PlantingSeedStep` with `AutoHolesAndBoundary`.
 
 ## [3.2.0] – 2024-08-28
 
@@ -241,6 +255,7 @@ options in the triangulation settings, aka `RestoreBoundary`.
 
 [Github Releases]: https://github.com/andywiecko/BurstTriangulator/releases
 
+[3.2.1]: https://github.com/andywiecko/BurstTriangulator/releases/tag/v3.2.1
 [3.2.0]: https://github.com/andywiecko/BurstTriangulator/releases/tag/v3.2.0
 [3.1.0]: https://github.com/andywiecko/BurstTriangulator/releases/tag/v3.1.0
 [3.0.0]: https://github.com/andywiecko/BurstTriangulator/releases/tag/v3.0.0

@@ -8,6 +8,8 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.TestTools;
+using NUnit.Framework.Interfaces;
+
 #if UNITY_MATHEMATICS_FIXEDPOINT
 using Unity.Mathematics.FixedPoint;
 #endif
@@ -26,7 +28,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             using var triangulator = new Triangulator<int2>(Allocator.Persistent)
             {
                 Input = { Positions = positions, ConstraintEdges = constraints, HoleSeeds = holes },
-                Settings = { AutoHolesAndBoundary = false, RefineMesh = true, RestoreBoundary = true, Preprocessor = Preprocessor.None, Verbose = false }
+                Settings = { AutoHolesAndBoundary = false, RefineMesh = true, RestoreBoundary = true, Preprocessor = Preprocessor.None, ValidateInput = false, Verbose = false }
             };
 
             triangulator.Run();
@@ -44,6 +46,15 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 #endif
     public class TriangulatorGenericsEditorTests<T> where T : unmanaged
     {
+        private static RunState IgnoreInt2AndFp2() => default(T) switch
+        {
+            int2 => RunState.Ignored,
+#if UNITY_MATHEMATICS_FIXEDPOINT
+            fp2 => RunState.Ignored,
+#endif
+            _ => RunState.Runnable,
+        };
+
         [Test]
         public void DelaunayTriangulationWithoutRefinementTest()
         {
@@ -69,6 +80,47 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             triangulator.Run();
 
             Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(new[] { 0, 2, 1, 0, 3, 2 }).Using(TrianglesComparer.Instance));
+        }
+
+        private static readonly TestCaseData[] validateArgsTestData = new[]
+        {
+            new TestCaseData(new TriangulationSettings{ AutoHolesAndBoundary = true }, true, Status.ConstraintEdgesMissingForAutoHolesAndBoundary, false){ TestName = "Test case 1 (log warning for AutoHolesAndBoundary)." },
+            new TestCaseData(new TriangulationSettings{ RestoreBoundary = true }, true, Status.ConstraintEdgesMissingForRestoreBoundary, false){ TestName = "Test case 2 (log warning for RestoreBoundary)." },
+            new TestCaseData(new TriangulationSettings{ RefineMesh = true }, false, Status.RefinementNotSupportedForCoordinateType, false){
+                TestName = "Test case 3 (log error for RefineMesh).", RunState = typeof(T) != typeof(int2) ? RunState.Ignored : RunState.Runnable },
+            new TestCaseData(new TriangulationSettings{ SloanMaxIters = -100 }, false, Status.SloanMaxItersMustBePositive(-100), true){ TestName = "Test case 4 (log error for SloanMaxIters)." },
+            new TestCaseData(new TriangulationSettings{ RefineMesh = true, RefinementThresholds = { Area = -1 } }, false, Status.RefinementThresholdAreaMustBePositive, false){
+                TestName = "Test case 5 (log error for negative area threshold).", RunState = typeof(T) == typeof(int2) ? RunState.Ignored : RunState.Runnable },
+            new TestCaseData(new TriangulationSettings{ RefineMesh = true, RefinementThresholds = { Angle = -1 } }, false, Status.RefinementThresholdAngleOutOfRange, false){
+                TestName = "Test case 6 (log error for negative angle threshold).", RunState = typeof(T) == typeof(int2) ? RunState.Ignored : RunState.Runnable },
+            new TestCaseData(new TriangulationSettings{ RefineMesh = true, RefinementThresholds = { Angle = math.PI / 4 + 1e-5f } }, false, Status.RefinementThresholdAngleOutOfRange, false){
+                TestName = "Test case 7 (log error for too big angle threshold).", RunState = typeof(T) == typeof(int2) ? RunState.Ignored : RunState.Runnable },
+        };
+
+        [Test, TestCaseSource(nameof(validateArgsTestData))]
+        public void ValidateArgsTest(TriangulationSettings settings, bool expectWarning, Status expected, bool constrain)
+        {
+            using var constraints = constrain ? new NativeArray<int>(new[] { 0, 1 }, Allocator.Persistent) : default;
+            using var positions = new NativeArray<T>(new[] { math.float2(0, 0), math.float2(1, 0), math.float2(1, 1) }.DynamicCast<T>(), Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(Allocator.Persistent)
+            {
+                Input = { Positions = positions, ConstraintEdges = constraints },
+                Settings =
+                {
+                    AutoHolesAndBoundary = settings.AutoHolesAndBoundary,
+                    Preprocessor = settings.Preprocessor,
+                    RefinementThresholds = { Angle = settings.RefinementThresholds.Angle, Area = settings.RefinementThresholds.Area},
+                    RefineMesh = settings.RefineMesh,
+                    RestoreBoundary = settings.RestoreBoundary,
+                    SloanMaxIters = settings.SloanMaxIters,
+                    ValidateInput = true,
+                    Verbose = false,
+                }
+            };
+
+            triangulator.Run();
+
+            Assert.That(triangulator.Output.Status.Value, Is.EqualTo(expected));
         }
 
         private static readonly TestCaseData[] validateInputPositionsTestData = new TestCaseData[]
@@ -97,7 +149,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1)
                 }
-            ) { TestName = "Test Case 3 (point with NaN)", ExpectedResult = Status.PositionsMustBeFinite(1) },
+            ) { TestName = "Test Case 3 (point with NaN)", ExpectedResult = Status.PositionsMustBeFinite(1), RunState = IgnoreInt2AndFp2() },
             new (
                 new[]
                 {
@@ -106,7 +158,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1)
                 }
-            ) { TestName = "Test Case 4 (point with +inf)", ExpectedResult = Status.PositionsMustBeFinite(1) },
+            ) { TestName = "Test Case 4 (point with +inf)", ExpectedResult = Status.PositionsMustBeFinite(1), RunState = IgnoreInt2AndFp2() },
             new (
                 new[]
                 {
@@ -115,7 +167,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1)
                 }
-            ) { TestName = "Test Case 4 (point with -inf)", ExpectedResult = Status.PositionsMustBeFinite(1) },
+            ) { TestName = "Test Case 4 (point with -inf)", ExpectedResult = Status.PositionsMustBeFinite(1), RunState = IgnoreInt2AndFp2() },
             new(
                 new[]
                 {
@@ -130,18 +182,6 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
         [Test, TestCaseSource(nameof(validateInputPositionsTestData))]
         public Status ValidateInputPositionsTest(float2[] managedPositions)
         {
-            if (typeof(T) == typeof(int2) && managedPositions.Any(p => !math.all(math.isfinite(p))))
-            {
-                Assert.Ignore("Integer coordinates cannot be infinite or NaN.");
-            }
-
-#if UNITY_MATHEMATICS_FIXEDPOINT
-            if (typeof(T) == typeof(fp2) && managedPositions.Any(p => !math.all(math.isfinite(p))))
-            {
-                Assert.Ignore("Fixed-point coordinates cannot be infinite or NaN.");
-            }
-#endif
-
             using var positions = new NativeArray<T>(managedPositions.DynamicCast<T>(), Allocator.Persistent);
             using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
             {
@@ -150,36 +190,6 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             };
 
             LogAssert.Expect(LogType.Error, new Regex(".*"));
-            triangulator.Run();
-
-            return triangulator.Output.Status.Value;
-        }
-
-        private static readonly TestCaseData[] validateInputPositionsNoVerboseTestData = validateInputPositionsTestData
-            .Select(i => new TestCaseData(i.Arguments) { TestName = i.TestName[..^1] + ", no verbose)", ExpectedResult = i.ExpectedResult }).ToArray();
-
-        [Test, TestCaseSource(nameof(validateInputPositionsNoVerboseTestData))]
-        public Status ValidateInputPositionsNoVerboseTest(float2[] managedPositions)
-        {
-            if (typeof(T) == typeof(int2) && managedPositions.Any(p => !math.all(math.isfinite(p))))
-            {
-                Assert.Ignore("Integer coordinates cannot be infinite or NaN.");
-            }
-
-#if UNITY_MATHEMATICS_FIXEDPOINT
-            if (typeof(T) == typeof(fp2) && managedPositions.Any(p => !math.all(math.isfinite(p))))
-            {
-                Assert.Ignore("Fixed-point coordinates cannot be infinite or NaN.");
-            }
-#endif
-
-            using var positions = new NativeArray<T>(managedPositions.DynamicCast<T>(), Allocator.Persistent);
-            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
-            {
-                Settings = { ValidateInput = true, Verbose = false },
-                Input = { Positions = positions },
-            };
-
             triangulator.Run();
 
             return triangulator.Output.Status.Value;
@@ -225,7 +235,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1),
                 },
-                new[]{ 0, 5, 1 }
+                new[]{ 0, 5, 2 }
             ) { TestName = "Test Case 5 (odd number of elements in constraints buffer)", ExpectedResult = Status.ConstraintsLengthNotDivisibleBy2(3) },
             new TestCaseData(
                 new[]
@@ -235,7 +245,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1),
                 },
-                new[]{ -1, 1, 1, 1 }
+                new[]{ -1, 1, 1, 2 }
             ) { TestName = "Test Case 6a (constraint out of positions range)", ExpectedResult = Status.ConstraintOutOfBounds(0, new int2(-1, 1), 4) },
             new TestCaseData(
                 new[]
@@ -245,7 +255,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1),
                 },
-                new[]{ 1, -1, 1, 1 }
+                new[]{ 1, -1, 1, 2 }
             ) { TestName = "Test Case 6b (constraint out of positions range)", ExpectedResult = Status.ConstraintOutOfBounds(0, new int2(1, -1), 4) },
             new TestCaseData(
                 new[]
@@ -255,7 +265,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1),
                 },
-                new[]{ 5, 1, 1, 1 }
+                new[]{ 5, 1, 1, 2 }
             ) { TestName = "Test Case 6c (constraint out of positions range)", ExpectedResult = Status.ConstraintOutOfBounds(0, new int2(5, 1), 4) },
             new TestCaseData(
                 new[]
@@ -265,40 +275,12 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                     math.float2(1, 1),
                     math.float2(0, 1),
                 },
-                new[]{ 1, 5, 1, 1 }
+                new[]{ 1, 5, 1, 2 }
             ) { TestName = "Test Case 6d (constraint out of positions range)", ExpectedResult = Status.ConstraintOutOfBounds(0, new int2(1, 5), 4) },
         };
 
         [Test, TestCaseSource(nameof(validateConstraintDelaunayTriangulationTestData))]
         public Status ValidateConstraintDelaunayTriangulationTest(float2[] managedPositions, int[] constraints)
-        {
-            using var positions = new NativeArray<T>(managedPositions.DynamicCast<T>(), Allocator.Persistent);
-            using var constraintEdges = new NativeArray<int>(constraints, Allocator.Persistent);
-            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
-            {
-                Settings =
-                {
-                    ValidateInput = true,
-                    Verbose = true,
-                },
-                Input =
-                {
-                    Positions = positions,
-                    ConstraintEdges = constraintEdges,
-                }
-            };
-
-            LogAssert.Expect(LogType.Error, new Regex(".*"));
-            triangulator.Run();
-
-            return triangulator.Output.Status.Value;
-        }
-
-        private static readonly TestCaseData[] validateConstraintDelaunayTriangulationNoVerboseTestData = validateConstraintDelaunayTriangulationTestData
-            .Select(i => new TestCaseData(i.Arguments) { TestName = i.TestName[..^1] + ", no verbose", ExpectedResult = i.ExpectedResult }).ToArray();
-
-        [Test, TestCaseSource(nameof(validateConstraintDelaunayTriangulationNoVerboseTestData))]
-        public Status ValidateConstraintDelaunayTriangulationNoVerboseTest(float2[] managedPositions, int[] constraints)
         {
             using var positions = new NativeArray<T>(managedPositions.DynamicCast<T>(), Allocator.Persistent);
             using var constraintEdges = new NativeArray<int>(constraints, Allocator.Persistent);
@@ -319,6 +301,44 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             triangulator.Run();
 
             return triangulator.Output.Status.Value;
+        }
+
+        private static readonly TestCaseData[] validateHolesTestData = new[]
+        {
+            new TestCaseData(default(int[]), new[]{ math.float2(2, 1) / 3, math.float2(2, 1) / 3 }, Status.RedudantHolesArray)
+            { TestName = "Test case 1 (log warning, constraints buffer not provided)"},
+            new TestCaseData(default(int[]), new[]{ (float2)float.NaN }, Status.HoleMustBeFinite(0))
+            { TestName = "Test case 2 (log error, nan)", RunState = IgnoreInt2AndFp2() },
+            new TestCaseData(default(int[]), new[]{ (float2)float.PositiveInfinity}, Status.HoleMustBeFinite(0))
+            { TestName = "Test case 3 (log error, +inf)", RunState = IgnoreInt2AndFp2() },
+            new TestCaseData(default(int[]), new[]{ (float2)float.NegativeInfinity }, Status.HoleMustBeFinite(0))
+            { TestName = "Test case 4 (log error, -inf)", RunState = IgnoreInt2AndFp2() },
+        };
+
+        [Test, TestCaseSource(nameof(validateHolesTestData))]
+        public void ValidateHolesTest(int[] constraints, float2[] holes, Status expected)
+        {
+            using var positions = new NativeArray<T>(new float2[] { 0, math.float2(1, 0), math.float2(1, 1), }.DynamicCast<T>(), Allocator.Persistent);
+            using var constraintEdges = constraints != null ? new NativeArray<int>(constraints, Allocator.Persistent) : default;
+            using var holeSeeds = new NativeArray<T>(holes.DynamicCast<T>(), Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(capacity: 1024, Allocator.Persistent)
+            {
+                Settings =
+                {
+                    ValidateInput = true,
+                    Verbose = false,
+                },
+                Input =
+                {
+                    Positions = positions,
+                    ConstraintEdges = constraintEdges,
+                    HoleSeeds = holeSeeds,
+                }
+            };
+
+            triangulator.Run();
+
+            Assert.That(triangulator.Output.Status.Value, Is.EqualTo(expected));
         }
 
         private static readonly TestCaseData[] edgeConstraintsTestData =
@@ -897,6 +917,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             triangulator.Run();
 
+            Assert.That(triangulator.Output.Status.Value, Is.EqualTo(Status.Ok));
             Assert.That(triangulator.Output.Triangles.AsArray(), Is.EqualTo(expected).Using(TrianglesComparer.Instance));
         }
 
@@ -1830,6 +1851,66 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             var manualResult = triangulator.Output.Triangles.AsArray().ToArray();
             Assert.That(autoResult, Is.EqualTo(manualResult));
         }
+
+        [Test]
+        public void AutoHolesWithIgnoredConstraintsTest()
+        {
+            // 3 ------------------------ 2
+            // |                          |
+            // |   5                      |
+            // |   |                      |
+            // |   |                      |
+            // |   |                      |
+            // |   |                      |
+            // |   |                      |
+            // |   |          9 ---- 8    |
+            // |   |          |      |    |
+            // |   |          |      |    |
+            // |   4          6 ---- 7    |
+            // |                          |
+            // 0 ------------------------ 1
+            using var positions = new NativeArray<T>(new float2[]
+            {
+                math.float2(0, 0),
+                math.float2(10, 0),
+                math.float2(10, 10),
+                math.float2(0, 10),
+
+                math.float2(1, 1),
+                math.float2(1, 9),
+
+                math.float2(8, 1),
+                math.float2(9, 1),
+                math.float2(9, 2),
+                math.float2(8, 2),
+            }.DynamicCast<T>(), Allocator.Persistent);
+            using var constraintEdges = new NativeArray<int>(new int[]
+            {
+                0, 1, 1, 2, 2, 3, 3, 0,
+                4, 5,
+                6, 7, 7, 8, 8, 9, 9, 6,
+            }, Allocator.Persistent);
+            using var constraintTypes = new NativeArray<ConstraintType>(new []
+            {
+                ConstraintType.ConstrainedAndHoleBoundary, ConstraintType.ConstrainedAndHoleBoundary, ConstraintType.ConstrainedAndHoleBoundary, ConstraintType.ConstrainedAndHoleBoundary,
+                ConstraintType.Constrained,
+                ConstraintType.ConstrainedAndHoleBoundary, ConstraintType.ConstrainedAndHoleBoundary, ConstraintType.ConstrainedAndHoleBoundary, ConstraintType.ConstrainedAndHoleBoundary,
+            }, Allocator.Persistent);
+            using var triangulator = new Triangulator<T>(Allocator.Persistent)
+            {
+                Input = {
+                    Positions = positions,
+                    ConstraintEdges = constraintEdges,
+                    ConstraintEdgeTypes = constraintTypes
+                },
+                Settings = { AutoHolesAndBoundary = true, },
+            };
+
+            triangulator.Run();
+
+            Assert.That(triangulator.Output.Triangles.AsArray(), Has.Length.EqualTo(3 * 12));
+            Assert.That(triangulator.Output.ConstrainedHalfedges.AsArray().Count(i => i == HalfedgeState.Constrained), Is.EqualTo(2));
+        }
     }
 
     [TestFixture(typeof(float2))]
@@ -1858,7 +1939,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 Settings =
                 {
                     RefineMesh = false,
-                    RestoreBoundary = true,
+                    RestoreBoundary = false,
                     Preprocessor = Preprocessor.PCA
                 }
             };
@@ -1888,7 +1969,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 {
                     RefinementThresholds = { Area = 0.01f },
                     RefineMesh = true,
-                    RestoreBoundary = true,
+                    RestoreBoundary = false,
                     Preprocessor = Preprocessor.PCA
                 }
             };
@@ -2388,7 +2469,7 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
                 {
                     ValidateInput = true,
                     RefineMesh = true,
-                    RestoreBoundary = true,
+                    RestoreBoundary = false,
                     RefinementThresholds =
                     {
                         Area = .10f,
@@ -2408,6 +2489,9 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
 
             triangulator.Input.ConstraintEdges = default;
             triangulator.Run();
+
+            Assert.That(triangulator.Output.Status.Value, Is.EqualTo(Status.Ok));
+
             var trianglesWithoutConstraints = triangulator.Output.Triangles.AsArray().ToArray();
 
             Assert.That(trianglesWithConstraints, Is.EqualTo(trianglesWithoutConstraints));
@@ -2520,8 +2604,8 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             Assert.That(triangulator.Output.ConstrainedHalfedges.AsArray(), Is.EqualTo(new[]
             {
                 // without edge constraints, only boundary halfedges are constrained!
-                true, true, false, true, true, false,
-                false, false, false, false, true, true,
+                HalfedgeState.Constrained, HalfedgeState.Constrained, HalfedgeState.Unconstrained, HalfedgeState.Constrained, HalfedgeState.Constrained, HalfedgeState.Unconstrained,
+                HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.Unconstrained, HalfedgeState.Constrained, HalfedgeState.Constrained,
             }));
         }
     }

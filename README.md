@@ -73,12 +73,23 @@ var triangles = triangulator.Output.Triangles;
 
 ## 📦 Dependencies
 
+**Required:**
+
 - [`Unity.Burst@1.8.7`][burst]
 - [`Unity.Collections@2.2.0`][collections]
+
+**Optional:**
+
+- [`com.danielmansson.mathematics.fixedpoint@0.1.0`][fixedpoint]
 
 ## 🤝 Contributions
 
 Found a bug? Please open an issue. You can find a list of known issues [**here**][issues]. Interested in contributing to the project? Feel free to open an issue or submit a pull request. For updates on current and future work related to this package, check out the package [project].
+
+## ⚖️ License
+
+- The code in this repository is licensed under the [MIT License](https://github.com/andywiecko/BurstTriangulator/blob/main/LICENSE.md).
+- The documentation in this repository is licensed under the [CC BY 4.0 License](https://github.com/andywiecko/BurstTriangulator/blob/main/Documentation~/LICENSE.md).
 
 [manual]: https://andywiecko.github.io/BurstTriangulator
 [issues]: https://github.com/halfvoxel/BurstTriangulator/manual/known-issues.html
@@ -89,3 +100,4 @@ Found a bug? Please open an issue. You can find a list of known issues [**here**
 [cgaldotnet]: https://github.com/Scrawk/CGALDotNet
 [triangle-net]: https://github.com/wo80/Triangle.NET
 [collections]: https://docs.unity3d.com/Packages/com.unity.collections@2.2
+[fixedpoint]: https://github.com/danielmansson/Unity.Mathematics.FixedPoint

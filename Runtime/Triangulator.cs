@@ -1,4 +1,28 @@
-﻿using andywiecko.BurstTriangulator.LowLevel.Unsafe;
+﻿/*
+MIT License
+
+Copyright (c) 2021 Andrzej Więckowski, Ph.D., https://github.com/andywiecko/BurstTriangulator
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+*/
+using andywiecko.BurstTriangulator.LowLevel.Unsafe;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -75,21 +99,27 @@ namespace andywiecko.BurstTriangulator
         [field: SerializeField]
         public bool RefineMesh { get; set; } = false;
         /// <summary>
-        /// If set to <see langword="true"/>, the provided data will be validated before running the triangulation procedure.
-        /// Input positions, as well as input constraints, have a few restrictions.
-        /// See <seealso href="https://github.com/andywiecko/BurstTriangulator/blob/main/README.md">README.md</seealso> for more details.
-        /// If one of the conditions fails, the triangulation will not be calculated.
-        /// This can be detected as an error by inspecting <see cref="OutputData{T2}.Status"/> value (native, can be used in jobs).
-        /// Additionally, if <see cref="Verbose"/> is set to <see langword="true"/>, the corresponding error will be logged in the Console.
+        /// If set to <see langword="true"/>, the provided <see cref="InputData{T2}"/> and <see cref="TriangulationSettings"/>
+        /// will be validated before executing the triangulation procedure. The input <see cref="InputData{T2}.Positions"/>,
+        /// <see cref="InputData{T2}.ConstraintEdges"/>, and <see cref="TriangulationSettings"/> have certain restrictions.
+        /// For more details, see the <see href="https://andywiecko.github.io/BurstTriangulator/manual/advanced/input-validation.html">manual</see>.
+        /// If any of the validation conditions are not met, the triangulation will not be performed.
+        /// This can be detected as an error by checking the <see cref="OutputData{T2}.Status"/> value (native, and usable in jobs).
+        /// Additionally, if <see cref="Verbose"/> is set to <see langword="true"/>, corresponding errors/warnings will be logged in the Console.
+        /// Note that some conditions may result in warnings only.
         /// </summary>
+        /// <remarks>
+        /// Input validation can be expensive. If you are certain of your input, consider disabling this option for additional performance.
+        /// </remarks>
         [field: SerializeField]
         public bool ValidateInput { get; set; } = true;
         /// <summary>
-        /// If set to <see langword="true"/>, caught errors with <see cref="Triangulator"/> will be logged in the Console.
+        /// If set to <see langword="true"/>, caught errors and warnings with <see cref="Triangulator"/> will be logged in the Console.
         /// </summary>
         /// <remarks>
         /// See also the <see cref="ValidateInput"/> settings.
         /// </remarks>
+        /// <seealso cref="ValidateInput"/>
         [field: SerializeField]
         public bool Verbose { get; set; } = true;
         /// <summary>
@@ -138,9 +168,19 @@ namespace andywiecko.BurstTriangulator
 
     public class InputData<T2> where T2 : unmanaged
     {
+        /// <summary>
+        /// Positions of points used in triangulation.
+        /// </summary>
         public NativeArray<T2> Positions { get; set; }
+        /// <summary>
+        /// Optional buffer for constraint edges. This array constrains specific edges to be included in the final
+        /// triangulation result. It should contain indexes corresponding to the <see cref="Positions"/> of the edges
+        /// in the format [a₀, a₁, b₀, b₁, c₀, c₁, ...], where (a₀, a₁), (b₀, b₁), (c₀, c₁), etc., represent the constraint edges.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b> If refinement is enabled, the provided constraints may be split during the refinement process.
+        /// </remarks>
         public NativeArray<int> ConstraintEdges { get; set; }
-
         /// <summary>
         /// An array of <see cref="ConstraintType"/> values corresponding to each edge in <see cref="ConstraintEdges"/>.
         ///
@@ -149,6 +189,11 @@ namespace andywiecko.BurstTriangulator
         /// If not set, all constraints will be treated as <see cref="ConstraintType.ConstrainedAndHoleBoundary"/>.
         /// </summary>
         public NativeArray<ConstraintType> ConstraintEdgeTypes { get; set; }
+        /// <summary>
+        /// Optional buffer containing seeds for holes. These hole seeds serve as starting points for a removal process that
+        /// mimics the spread of a virus. During this process, <see cref="ConstraintEdges"/> act as barriers to prevent further propagation.
+        /// For more information, refer to the documentation.
+        /// </summary>
         public NativeArray<T2> HoleSeeds { get; set; }
     }
 
@@ -173,12 +218,33 @@ namespace andywiecko.BurstTriangulator
 
     public class OutputData<T2> where T2 : unmanaged
     {
+        /// <summary>
+        /// Positions of triangulation points.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b> This buffer may include additional points than <see cref="InputData{T2}.Positions"/> if refinement is enabled.
+        /// Additionally, the positions might differ slightly (by a small ε) if a <see cref="TriangulationSettings.Preprocessor"/> is applied.
+        /// </remarks>
         public NativeList<T2> Positions => owner.outputPositions;
+        /// <summary>
+        /// Continuous buffer of resulting triangles. All triangles are guaranteed to be oriented clockwise.
+        /// </summary>
         public NativeList<int> Triangles => owner.triangles;
+        /// <summary>
+        /// Status of the triangulation. Retrieve this value to detect any errors that occurred during triangulation.
+        /// </summary>
         public NativeReference<Status> Status => owner.status;
+        /// <summary>
+        /// Continuous buffer of resulting halfedges. A value of -1 indicates that there is no corresponding opposite halfedge.
+        /// For more information, refer to the documentation on halfedges.
+        /// </summary>
         public NativeList<int> Halfedges => owner.halfedges;
+        /// <summary>
+        /// Buffer corresponding to <see cref="Halfedges"/>.
+        /// </summary>
         public NativeList<HalfedgeState> ConstrainedHalfedges => owner.constrainedHalfedges;
         private readonly Triangulator<T2> owner;
+        [Obsolete("This will be converted into internal ctor.")]
         public OutputData(Triangulator<T2> owner) => this.owner = owner;
     }
 
@@ -205,6 +271,10 @@ namespace andywiecko.BurstTriangulator
         public readonly void Free() => UnsafeUtility.ReleaseGCObject(gcHandle);
     }
 
+    /// <summary>
+    /// A wrapper for <see cref="Triangulator{T2}"/> where T2 is <see cref="double2"/>.
+    /// </summary>
+    /// <seealso cref="Triangulator{T2}"/>
     public class Triangulator : IDisposable
     {
         public TriangulationSettings Settings => impl.Settings;
@@ -214,6 +284,9 @@ namespace andywiecko.BurstTriangulator
         public Triangulator(int capacity, Allocator allocator) => impl = new(capacity, allocator);
         public Triangulator(Allocator allocator) => impl = new(allocator);
 
+        /// <summary>
+        /// Releases all resources (memory and safety handles).
+        /// </summary>
         public void Dispose() => impl.Dispose();
 
         /// <summary>
@@ -253,11 +326,16 @@ namespace andywiecko.BurstTriangulator
             status = new(Status.Ok, allocator);
             halfedges = new(6 * capacity, allocator);
             constrainedHalfedges = new(6 * capacity, allocator);
+#pragma warning disable CS0618
             Output = new(this);
+#pragma warning restore CS0618
         }
 
         public Triangulator(Allocator allocator) : this(capacity: 16 * 1024, allocator) { }
 
+        /// <summary>
+        /// Releases all resources (memory and safety handles).
+        /// </summary>
         public void Dispose()
         {
             outputPositions.Dispose();
@@ -316,17 +394,43 @@ namespace andywiecko.BurstTriangulator
             return ret;
         }
 
+        /// <summary>
+        /// Perform the job's Execute method immediately on the same thread.
+        /// </summary>
         public static void Run(this Triangulator<float2> @this) =>
             new TriangulationJob<float, float2, float, TransformFloat, FloatUtils>(@this).Run();
+        /// <summary>
+        /// Schedule the job for execution on a worker thread.
+        /// </summary>
+        /// <param name="dependencies">
+        /// Dependencies are used to ensure that a job executes on worker threads after the dependency has completed execution.
+        /// Making sure that two jobs reading or writing to same data do not run in parallel.
+        /// </param>
+        /// <returns>
+        /// The handle identifying the scheduled job. Can be used as a dependency for a later job or ensure completion on the main thread.
+        /// </returns>
         public static JobHandle Schedule(this Triangulator<float2> @this, JobHandle dependencies = default) =>
             new TriangulationJob<float, float2, float, TransformFloat, FloatUtils>(@this).Schedule(dependencies);
 
+        /// <summary>
+        /// Perform the job's Execute method immediately on the same thread.
+        /// </summary>
         public static void Run(this Triangulator<Vector2> @this) =>
             new TriangulationJob<float, float2, float, TransformFloat, FloatUtils>(
                 input: new() { Positions = @this.Input.Positions.Reinterpret<float2>(), ConstraintEdges = @this.Input.ConstraintEdges, ConstraintEdgeTypes = @this.Input.ConstraintEdgeTypes, HoleSeeds = @this.Input.HoleSeeds.Reinterpret<float2>() },
                 output: new() { Triangles = @this.triangles, Halfedges = @this.halfedges, Positions = UnsafeUtility.As<NativeList<Vector2>, NativeList<float2>>(ref @this.outputPositions), Status = @this.status, ConstrainedHalfedges = @this.constrainedHalfedges },
                 args: @this.Settings
         ).Run();
+        /// <summary>
+        /// Schedule the job for execution on a worker thread.
+        /// </summary>
+        /// <param name="dependencies">
+        /// Dependencies are used to ensure that a job executes on worker threads after the dependency has completed execution.
+        /// Making sure that two jobs reading or writing to same data do not run in parallel.
+        /// </param>
+        /// <returns>
+        /// The handle identifying the scheduled job. Can be used as a dependency for a later job or ensure completion on the main thread.
+        /// </returns>
         public static JobHandle Schedule(this Triangulator<Vector2> @this, JobHandle dependencies = default) =>
             new TriangulationJob<float, float2, float, TransformFloat, FloatUtils>(
                 input: new() { Positions = @this.Input.Positions.Reinterpret<float2>(), ConstraintEdges = @this.Input.ConstraintEdges, ConstraintEdgeTypes = @this.Input.ConstraintEdgeTypes, HoleSeeds = @this.Input.HoleSeeds.Reinterpret<float2>() },
@@ -334,19 +438,58 @@ namespace andywiecko.BurstTriangulator
                 args: @this.Settings
         ).Schedule(dependencies);
 
+        /// <summary>
+        /// Perform the job's Execute method immediately on the same thread.
+        /// </summary>
         public static void Run(this Triangulator<double2> @this) =>
             new TriangulationJob<double, double2, double, TransformDouble, DoubleUtils>(@this).Run();
+        /// <summary>
+        /// Schedule the job for execution on a worker thread.
+        /// </summary>
+        /// <param name="dependencies">
+        /// Dependencies are used to ensure that a job executes on worker threads after the dependency has completed execution.
+        /// Making sure that two jobs reading or writing to same data do not run in parallel.
+        /// </param>
+        /// <returns>
+        /// The handle identifying the scheduled job. Can be used as a dependency for a later job or ensure completion on the main thread.
+        /// </returns>
         public static JobHandle Schedule(this Triangulator<double2> @this, JobHandle dependencies = default) =>
             new TriangulationJob<double, double2, double, TransformDouble, DoubleUtils>(@this).Schedule(dependencies);
 
+        /// <summary>
+        /// Perform the job's Execute method immediately on the same thread.
+        /// </summary>
         public static void Run(this Triangulator<int2> @this) =>
             new TriangulationJob<int, int2, long, TransformInt, IntUtils>(@this).Run();
+        /// <summary>
+        /// Schedule the job for execution on a worker thread.
+        /// </summary>
+        /// <param name="dependencies">
+        /// Dependencies are used to ensure that a job executes on worker threads after the dependency has completed execution.
+        /// Making sure that two jobs reading or writing to same data do not run in parallel.
+        /// </param>
+        /// <returns>
+        /// The handle identifying the scheduled job. Can be used as a dependency for a later job or ensure completion on the main thread.
+        /// </returns>
         public static JobHandle Schedule(this Triangulator<int2> @this, JobHandle dependencies = default) =>
             new TriangulationJob<int, int2, long, TransformInt, IntUtils>(@this).Schedule(dependencies);
 
 #if UNITY_MATHEMATICS_FIXEDPOINT
+        /// <summary>
+        /// Perform the job's Execute method immediately on the same thread.
+        /// </summary>
         public static void Run(this Triangulator<fp2> @this) =>
             new TriangulationJob<fp, fp2, fp, TransformFp, FpUtils>(@this).Run();
+        /// <summary>
+        /// Schedule the job for execution on a worker thread.
+        /// </summary>
+        /// <param name="dependencies">
+        /// Dependencies are used to ensure that a job executes on worker threads after the dependency has completed execution.
+        /// Making sure that two jobs reading or writing to same data do not run in parallel.
+        /// </param>
+        /// <returns>
+        /// The handle identifying the scheduled job. Can be used as a dependency for a later job or ensure completion on the main thread.
+        /// </returns>
         public static JobHandle Schedule(this Triangulator<fp2> @this, JobHandle dependencies = default) =>
             new TriangulationJob<fp, fp2, fp, TransformFp, FpUtils>(@this).Schedule(dependencies);
 #endif
@@ -355,23 +498,71 @@ namespace andywiecko.BurstTriangulator
 
 namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 {
+    /// <summary>
+    /// Native correspondence to <see cref="BurstTriangulator.InputData{T2}"/>.
+    /// </summary>
+    /// <seealso cref="BurstTriangulator.InputData{T2}"/>
     public struct InputData<T2> where T2 : unmanaged
     {
+        /// <summary>
+        /// Positions of points used in triangulation.
+        /// </summary>
         public NativeArray<T2> Positions;
+        /// <summary>
+        /// Optional buffer for constraint edges. This array constrains specific edges to be included in the final
+        /// triangulation result. It should contain indexes corresponding to the <see cref="Positions"/> of the edges
+        /// in the format [a₀, a₁, b₀, b₁, c₀, c₁, ...], where (a₀, a₁), (b₀, b₁), (c₀, c₁), etc., represent the constraint edges.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b> If refinement is enabled, the provided constraints may be split during the refinement process.
+        /// </remarks>
         public NativeArray<int> ConstraintEdges;
         public NativeArray<ConstraintType> ConstraintEdgeTypes;
+        /// <summary>
+        /// Optional buffer containing seeds for holes. These hole seeds serve as starting points for a removal process that
+        /// mimics the spread of a virus. During this process, <see cref="ConstraintEdges"/> act as barriers to prevent further propagation.
+        /// For more information, refer to the documentation.
+        /// </summary>
         public NativeArray<T2> HoleSeeds;
     }
 
+    /// <summary>
+    /// Native correspondence to <see cref="BurstTriangulator.OutputData{T2}"/>.
+    /// </summary>
+    /// <seealso cref="BurstTriangulator.OutputData{T2}"/>
     public struct OutputData<T2> where T2 : unmanaged
     {
+        /// <summary>
+        /// Positions of triangulation points.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b> This buffer may include additional points than <see cref="InputData{T2}.Positions"/> if refinement is enabled.
+        /// Additionally, the positions might differ slightly (by a small ε) if a <see cref="Args.Preprocessor"/> is applied.
+        /// </remarks>
         public NativeList<T2> Positions;
+        /// <summary>
+        /// Continuous buffer of resulting triangles. All triangles are guaranteed to be oriented clockwise.
+        /// </summary>
         public NativeList<int> Triangles;
+        /// <summary>
+        /// Status of the triangulation. Retrieve this value to detect any errors that occurred during triangulation.
+        /// </summary>
         public NativeReference<Status> Status;
+        /// <summary>
+        /// Continuous buffer of resulting halfedges. A value of -1 indicates that there is no corresponding opposite halfedge.
+        /// For more information, refer to the documentation on halfedges.
+        /// </summary>
         public NativeList<int> Halfedges;
+        /// <summary>
+        /// Buffer corresponding to <see cref="Halfedges"/>.
+        /// </summary>
         public NativeList<HalfedgeState> ConstrainedHalfedges;
     }
 
+    /// <summary>
+    /// Native correspondence to <see cref="TriangulationSettings"/>.
+    /// </summary>
+    /// <seealso cref="TriangulationSettings"/>
     public readonly struct Args
     {
         public readonly Preprocessor Preprocessor;
@@ -383,6 +574,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         public readonly bool AutoHolesAndBoundary, RefineMesh, RestoreBoundary, ValidateInput, Verbose;
         public readonly float RefinementThresholdAngle, RefinementThresholdArea;
 
+        /// <summary>
+        /// Constructs a new <see cref="Args"/>.
+        /// </summary>
+        /// <remarks>
+        /// Use <see cref="Default"/> and <see cref="With"/> for easy construction.
+        /// </remarks>
         public Args(
             Preprocessor preprocessor,
             int sloanMaxIters,
@@ -401,6 +598,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             RefinementThresholdArea = refinementThresholdArea;
         }
 
+        /// <summary>
+        /// Construct <see cref="Args"/> with default values (same as <see cref="TriangulationSettings"/> defaults).
+        /// </summary>
         public static Args Default(
             Preprocessor preprocessor = Preprocessor.None,
             int sloanMaxIters = 1_000_000,
@@ -425,6 +625,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             refinementThresholdArea: settings.RefinementThresholds.Area
         );
 
+        /// <summary>
+        /// Returns a new <see cref="Args"/> but with changed selected parameter(s) values.
+        /// </summary>
         public Args With(
             Preprocessor? preprocessor = null,
             int? sloanMaxIters = null,
@@ -441,6 +644,8 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
     /// <summary>
     /// A wrapper for <see cref="UnsafeTriangulator{T2}"/> where T2 is <see cref="double2"/>.
     /// </summary>
+    /// <seealso cref="UnsafeTriangulator{T2}"/>
+    /// <seealso cref="Extensions"/>
     public readonly struct UnsafeTriangulator { }
 
     /// <summary>
@@ -468,29 +673,211 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
     public static class Extensions
     {
+        /// <summary>
+        /// Performs triangulation on the given <paramref name="input"/>, producing the result in <paramref name="output"/> based on the settings specified in <paramref name="args"/>.
+        /// This method corresponds to the native implementation of <see cref="Triangulator.Run"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void Triangulate(this UnsafeTriangulator @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, TransformDouble, DoubleUtils>().Triangulate(input, output, args, allocator);
+        /// <summary>
+        /// Plants hole seeds defined in <paramref name="input"/> (or restores boundaries or auto-holes if specified in <paramref name="args"/>)
+        /// within the triangulation data in <paramref name="output"/>, using the settings specified in <paramref name="args"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void PlantHoleSeeds(this UnsafeTriangulator @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, TransformDouble, DoubleUtils>().PlantHoleSeeds(input, output, args, allocator);
+        /// <summary>
+        /// Refines the mesh for a valid triangulation in <paramref name="output"/>.
+        /// Refinement parameters can be provided with the selected precision type T in generics, which is especially useful for fixed-point arithmetic.
+        /// Refinement parameters in <see cref="Args"/> are restricted to <see cref="float"/> precision.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
+        /// <param name="angleThreshold">Expressed in <em>radians</em>. Default: 5° = 0.0872664626 rad.</param>
+        /// <param name="constrainBoundary">Used to constrain boundary halfedges. Since the refinement algorithm (whether for constrained triangulation or not) requires constrained halfedges at the boundary, not setting this option may cause unexpected behavior, especially when the restoreBoundary option is disabled.</param>
         public static void RefineMesh(this UnsafeTriangulator @this, OutputData<double2> output, Allocator allocator, double areaThreshold = 1, double angleThreshold = 0.0872664626, bool constrainBoundary = false) => new UnsafeTriangulator<double, double2, double, TransformDouble, DoubleUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
 
+        /// <summary>
+        /// Performs triangulation on the given <paramref name="input"/>, producing the result in <paramref name="output"/> based on the settings specified in <paramref name="args"/>.
+        /// This method corresponds to the native implementation of <see cref="Triangulator.Run"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void Triangulate(this UnsafeTriangulator<float2> @this, InputData<float2> input, OutputData<float2> output, Args args, Allocator allocator) => new UnsafeTriangulator<float, float2, float, TransformFloat, FloatUtils>().Triangulate(input, output, args, allocator);
+        /// <summary>
+        /// Plants hole seeds defined in <paramref name="input"/> (or restores boundaries or auto-holes if specified in <paramref name="args"/>)
+        /// within the triangulation data in <paramref name="output"/>, using the settings specified in <paramref name="args"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void PlantHoleSeeds(this UnsafeTriangulator<float2> @this, InputData<float2> input, OutputData<float2> output, Args args, Allocator allocator) => new UnsafeTriangulator<float, float2, float, TransformFloat, FloatUtils>().PlantHoleSeeds(input, output, args, allocator);
+        /// <summary>
+        /// Refines the mesh for a valid triangulation in <paramref name="output"/>.
+        /// Refinement parameters can be provided with the selected precision type T in generics, which is especially useful for fixed-point arithmetic.
+        /// Refinement parameters in <see cref="Args"/> are restricted to <see cref="float"/> precision.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
+        /// <param name="angleThreshold">Expressed in <em>radians</em>. Default: 5° = 0.0872664626 rad.</param>
+        /// <param name="constrainBoundary">Used to constrain boundary halfedges. Since the refinement algorithm (whether for constrained triangulation or not) requires constrained halfedges at the boundary, not setting this option may cause unexpected behavior, especially when the restoreBoundary option is disabled.</param>
         public static void RefineMesh(this UnsafeTriangulator<float2> @this, OutputData<float2> output, Allocator allocator, float areaThreshold = 1, float angleThreshold = 0.0872664626f, bool constrainBoundary = false) => new UnsafeTriangulator<float, float2, float, TransformFloat, FloatUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
 
+        /// <summary>
+        /// Performs triangulation on the given <paramref name="input"/>, producing the result in <paramref name="output"/> based on the settings specified in <paramref name="args"/>.
+        /// This method corresponds to the native implementation of <see cref="Triangulator.Run"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void Triangulate(this UnsafeTriangulator<Vector2> @this, InputData<Vector2> input, OutputData<Vector2> output, Args args, Allocator allocator) => new UnsafeTriangulator<float, float2, float, TransformFloat, FloatUtils>().Triangulate(UnsafeUtility.As<InputData<Vector2>, InputData<float2>>(ref input), UnsafeUtility.As<OutputData<Vector2>, OutputData<float2>>(ref output), args, allocator);
+
+        /// <summary>
+        /// Plants hole seeds defined in <paramref name="input"/> (or restores boundaries or auto-holes if specified in <paramref name="args"/>)
+        /// within the triangulation data in <paramref name="output"/>, using the settings specified in <paramref name="args"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void PlantHoleSeeds(this UnsafeTriangulator<Vector2> @this, InputData<Vector2> input, OutputData<Vector2> output, Args args, Allocator allocator) => new UnsafeTriangulator<float, float2, float, TransformFloat, FloatUtils>().PlantHoleSeeds(UnsafeUtility.As<InputData<Vector2>, InputData<float2>>(ref input), UnsafeUtility.As<OutputData<Vector2>, OutputData<float2>>(ref output), args, allocator);
+
+        /// <summary>
+        /// Refines the mesh for a valid triangulation in <paramref name="output"/>.
+        /// Refinement parameters can be provided with the selected precision type T in generics, which is especially useful for fixed-point arithmetic.
+        /// Refinement parameters in <see cref="Args"/> are restricted to <see cref="float"/> precision.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
+        /// <param name="angleThreshold">Expressed in <em>radians</em>. Default: 5° = 0.0872664626 rad.</param>
+        /// <param name="constrainBoundary">Used to constrain boundary halfedges. Since the refinement algorithm (whether for constrained triangulation or not) requires constrained halfedges at the boundary, not setting this option may cause unexpected behavior, especially when the restoreBoundary option is disabled.</param>
         public static void RefineMesh(this UnsafeTriangulator<Vector2> @this, OutputData<Vector2> output, Allocator allocator, float areaThreshold = 1, float angleThreshold = 0.0872664626f, bool constrainBoundary = false) => new UnsafeTriangulator<float, float2, float, TransformFloat, FloatUtils>().RefineMesh(UnsafeUtility.As<OutputData<Vector2>, OutputData<float2>>(ref output), allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
 
+        /// <summary>
+        /// Performs triangulation on the given <paramref name="input"/>, producing the result in <paramref name="output"/> based on the settings specified in <paramref name="args"/>.
+        /// This method corresponds to the native implementation of <see cref="Triangulator.Run"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void Triangulate(this UnsafeTriangulator<double2> @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, TransformDouble, DoubleUtils>().Triangulate(input, output, args, allocator);
+        /// <summary>
+        /// Plants hole seeds defined in <paramref name="input"/> (or restores boundaries or auto-holes if specified in <paramref name="args"/>)
+        /// within the triangulation data in <paramref name="output"/>, using the settings specified in <paramref name="args"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void PlantHoleSeeds(this UnsafeTriangulator<double2> @this, InputData<double2> input, OutputData<double2> output, Args args, Allocator allocator) => new UnsafeTriangulator<double, double2, double, TransformDouble, DoubleUtils>().PlantHoleSeeds(input, output, args, allocator);
+
+        /// <summary>
+        /// Refines the mesh for a valid triangulation in <paramref name="output"/>.
+        /// Refinement parameters can be provided with the selected precision type T in generics, which is especially useful for fixed-point arithmetic.
+        /// Refinement parameters in <see cref="Args"/> are restricted to <see cref="float"/> precision.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
+        /// <param name="angleThreshold">Expressed in <em>radians</em>. Default: 5° = 0.0872664626 rad.</param>
+        /// <param name="constrainBoundary">Used to constrain boundary halfedges. Since the refinement algorithm (whether for constrained triangulation or not) requires constrained halfedges at the boundary, not setting this option may cause unexpected behavior, especially when the restoreBoundary option is disabled.</param>
         public static void RefineMesh(this UnsafeTriangulator<double2> @this, OutputData<double2> output, Allocator allocator, double areaThreshold = 1, double angleThreshold = 0.0872664626, bool constrainBoundary = false) => new UnsafeTriangulator<double, double2, double, TransformDouble, DoubleUtils>().RefineMesh(output, allocator, 2 * areaThreshold, angleThreshold, constrainBoundary);
 
+        /// <summary>
+        /// Performs triangulation on the given <paramref name="input"/>, producing the result in <paramref name="output"/> based on the settings specified in <paramref name="args"/>.
+        /// This method corresponds to the native implementation of <see cref="Triangulator.Run"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void Triangulate(this UnsafeTriangulator<int2> @this, InputData<int2> input, OutputData<int2> output, Args args, Allocator allocator) => new UnsafeTriangulator<int, int2, long, TransformInt, IntUtils>().Triangulate(input, output, args, allocator);
+        /// <summary>
+        /// Plants hole seeds defined in <paramref name="input"/> (or restores boundaries or auto-holes if specified in <paramref name="args"/>)
+        /// within the triangulation data in <paramref name="output"/>, using the settings specified in <paramref name="args"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void PlantHoleSeeds(this UnsafeTriangulator<int2> @this, InputData<int2> input, OutputData<int2> output, Args args, Allocator allocator) => new UnsafeTriangulator<int, int2, long, TransformInt, IntUtils>().PlantHoleSeeds(input, output, args, allocator);
 
 #if UNITY_MATHEMATICS_FIXEDPOINT
+        /// <summary>
+        /// Performs triangulation on the given <paramref name="input"/>, producing the result in <paramref name="output"/> based on the settings specified in <paramref name="args"/>.
+        /// This method corresponds to the native implementation of <see cref="Triangulator.Run"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void Triangulate(this UnsafeTriangulator<fp2> @this, InputData<fp2> input, OutputData<fp2> output, Args args, Allocator allocator) => new UnsafeTriangulator<fp, fp2, fp, TransformFp, FpUtils>().Triangulate(input, output, args, allocator);
+        /// <summary>
+        /// Plants hole seeds defined in <paramref name="input"/> (or restores boundaries or auto-holes if specified in <paramref name="args"/>)
+        /// within the triangulation data in <paramref name="output"/>, using the settings specified in <paramref name="args"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
         public static void PlantHoleSeeds(this UnsafeTriangulator<fp2> @this, InputData<fp2> input, OutputData<fp2> output, Args args, Allocator allocator) => new UnsafeTriangulator<fp, fp2, fp, TransformFp, FpUtils>().PlantHoleSeeds(input, output, args, allocator);
-        public static void RefineMesh(this UnsafeTriangulator<fp2> @this, OutputData<fp2> output, Allocator allocator, fp? areaThreshold = null, fp? angleThreshold = null, fp? concentricShells = null, bool constrainBoundary = false) => new UnsafeTriangulator<fp, fp2, fp, TransformFp, FpUtils>().RefineMesh(output, allocator, 2 * (areaThreshold ?? 1), angleThreshold ?? (fp)0.0872664626, concentricShells ?? (fp)0.001, constrainBoundary);
+        /// <summary>
+        /// Refines the mesh for a valid triangulation in <paramref name="output"/>.
+        /// Refinement parameters can be provided with the selected precision type T in generics, which is especially useful for fixed-point arithmetic.
+        /// Refinement parameters in <see cref="Args"/> are restricted to <see cref="float"/> precision.
+        /// </summary>
+        /// <remarks>
+        /// <b>Note:</b>
+        /// This method requires that <paramref name="output"/> contains valid triangulation data.
+        /// The <paramref name="input"/> and <paramref name="output"/> native containers must be allocated by the user. Some buffers are optional; refer to the documentation for more details.
+        /// </remarks>
+        /// <param name="allocator">The allocator to use. If called from a job, consider using <see cref="Allocator.Temp"/>.</param>
+        /// <param name="angleThreshold">Expressed in <em>radians</em>. Default: 5° = 0.0872664626 rad.</param>
+        /// <param name="constrainBoundary">Used to constrain boundary halfedges. Since the refinement algorithm (whether for constrained triangulation or not) requires constrained halfedges at the boundary, not setting this option may cause unexpected behavior, especially when the restoreBoundary option is disabled.</param>
+        public static void RefineMesh(this UnsafeTriangulator<fp2> @this, OutputData<fp2> output, Allocator allocator, fp? areaThreshold = null, fp? angleThreshold = null, fp? concentricShells = null, bool constrainBoundary = false) => new UnsafeTriangulator<fp, fp2, fp, TransformFp, FpUtils>().RefineMesh(output, allocator, 2 * (areaThreshold ?? 1), angleThreshold ?? fp.FromRaw(374806602) /*Raw value for (fp)0.0872664626*/, concentricShells ?? fp.FromRaw(4294967) /*Raw value for (fp)1 / 1000*/, constrainBoundary);
 #endif
     }
 
@@ -614,7 +1001,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             new ValidateInputStep(input, output, args).Execute();
             new DelaunayTriangulationStep(output, args).Execute(allocator);
             new ConstrainEdgesStep(input, output, args).Execute(allocator);
-            new PlantingSeedStep(input, output, args, localHoles).Execute(allocator, input.ConstraintEdges.IsCreated);
+            new PlantingSeedStep(output, args, localHoles).Execute(allocator, input.ConstraintEdges.IsCreated);
             new RefineMeshStep(output, args, lt).Execute(allocator, refineMesh: args.RefineMesh, constrainBoundary: !input.ConstraintEdges.IsCreated || !args.RestoreBoundary);
             PostProcessInputStep(output, args, lt);
 
@@ -692,6 +1079,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private readonly Args args;
             private NativeArray<int>.ReadOnly constraints;
             private NativeArray<ConstraintType>.ReadOnly constraintTypes;
+            private NativeArray<T2>.ReadOnly holes;
 
             public ValidateInputStep(InputData<T2> input, OutputData<T2> output, Args args)
             {
@@ -700,6 +1088,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 this.args = args;
                 constraints = input.ConstraintEdges.AsReadOnly();
                 constraintTypes = input.ConstraintEdgeTypes.AsReadOnly();
+                holes = input.HoleSeeds.AsReadOnly();
             }
 
             public void Execute()
@@ -711,6 +1100,47 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
                 using var _ = Markers.ValidateInputStep.Auto();
 
+                ValidateArgs();
+                ValidatePositions();
+                ValidateConstraints();
+                ValidateHoles();
+            }
+
+            private void ValidateArgs()
+            {
+                if (args.AutoHolesAndBoundary && !constraints.IsCreated)
+                {
+                    status.Value = Status.ConstraintEdgesMissingForAutoHolesAndBoundary;
+                }
+
+                if (args.RestoreBoundary && !constraints.IsCreated)
+                {
+                    status.Value = Status.ConstraintEdgesMissingForRestoreBoundary;
+                }
+
+                if (args.RefineMesh && !utils.SupportsRefinement())
+                {
+                    status.Value = Status.RefinementNotSupportedForCoordinateType;
+                }
+
+                if (constraints.IsCreated && args.SloanMaxIters < 1)
+                {
+                    status.Value = Status.SloanMaxItersMustBePositive(args.SloanMaxIters);
+                }
+
+                if (args.RefineMesh && args.RefinementThresholdArea < 0)
+                {
+                    status.Value = Status.RefinementThresholdAreaMustBePositive;
+                }
+
+                if (args.RefineMesh && args.RefinementThresholdAngle < 0 || args.RefinementThresholdAngle > math.PI / 4)
+                {
+                    status.Value = Status.RefinementThresholdAngleOutOfRange;
+                }
+            }
+
+            private void ValidatePositions()
+            {
                 if (positions.Length < 3)
                 {
                     status.Value = Status.PositionsLengthLessThan3(positions.Length);
@@ -719,24 +1149,33 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
                 for (int i = 0; i < positions.Length; i++)
                 {
-                    if (!PointValidation(i))
+                    if (math.any(!utils.isfinite(positions[i])))
                     {
                         status.Value = Status.PositionsMustBeFinite(i);
                         return;
                     }
-                    var err = PointPointValidation(i);
-                    if (err.IsError) {
-                        status.Value = err;
-                        return;
+
+                    var pi = positions[i];
+                    for (int j = i + 1; j < positions.Length; j++)
+                    {
+                        var pj = positions[j];
+                        if (math.all(utils.eq(pi, pj)))
+                        {
+                            status.Value = Status.DuplicatePosition(i);
+                            return;
+                        }
                     }
                 }
+            }
 
+            private void ValidateConstraints()
+            {
                 if (!constraints.IsCreated)
                 {
                     return;
                 }
 
-                if (constraints.Length % 2 == 1)
+                if (constraints.Length % 2 != 0)
                 {
                     status.Value = Status.ConstraintsLengthNotDivisibleBy2(constraints.Length);
                     return;
@@ -748,94 +1187,77 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     return;
                 }
 
+                // Edge validation
                 for (int i = 0; i < constraints.Length / 2; i++)
                 {
-                    var err = EdgePositionsRangeValidation(i);
-                    if (!err.IsError) err = EdgeValidation(i);
-                    if (!err.IsError) err = EdgeEdgeValidation(i);
+                    var (a0Id, a1Id) = (constraints[2 * i], constraints[2 * i + 1]);
+                    var count = positions.Length;
+                    if (a0Id >= count || a0Id < 0 || a1Id >= count || a1Id < 0)
+                    {
+                        status.Value = Status.ConstraintOutOfBounds(i, new int2(a0Id, a1Id), count);
+                        return;
+                    }
 
-                    if (err.IsError) {
-                        status.Value = err;
+                    if (a0Id == a1Id)
+                    {
+                        status.Value = Status.ConstraintSelfLoop(i, new int2(a0Id, a1Id));
                         return;
                     }
                 }
-            }
 
-            private bool PointValidation(int i) => math.all(utils.isfinite(positions[i]));
-
-            private Status PointPointValidation(int i)
-            {
-                var pi = positions[i];
-                for (int j = i + 1; j < positions.Length; j++)
+                // Edge-edge validation
+                for (int i = 0; i < constraints.Length / 2; i++)
                 {
-                    var pj = positions[j];
-                    if (math.all(utils.eq(pi, pj)))
+                    var (a0Id, a1Id) = (constraints[2 * i], constraints[2 * i + 1]);
+                    var (a0, a1) = (positions[a0Id], positions[a1Id]);
+
+                    for (int j = i + 1; j < constraints.Length / 2; j++)
                     {
-                        return Status.DuplicatePosition(i);
+                        var (b0Id, b1Id) = (constraints[2 * j], constraints[2 * j + 1]);
+
+                        if (a0Id == b0Id && a1Id == b1Id || a0Id == b1Id && a1Id == b0Id)
+                        {
+                            status.Value = Status.DuplicateConstraint(i, j);
+                            return;
+                        }
+
+                        // One common point, cases should be filtered out at edge-point validation
+                        if (a0Id == b0Id || a0Id == b1Id || a1Id == b0Id || a1Id == b1Id)
+                        {
+                            continue;
+                        }
+
+                        var (b0, b1) = (positions[b0Id], positions[b1Id]);
+                        // Check if the two constraints intersect, but ignore if they only overlap at endpoints
+                        if (EdgeEdgeIntersection(a0, a1, b0, b1) && !(PointLineSegmentIntersection(a0, b0, b1) || PointLineSegmentIntersection(a1, b0, b1) || PointLineSegmentIntersection(b0, a0, a1) || PointLineSegmentIntersection(b1, a0, a1)))
+                        {
+                            status.Value = Status.ConstraintIntersection(i, j);
+                            return;
+                        }
                     }
                 }
-                return Status.Ok;
             }
 
-            private Status EdgePositionsRangeValidation(int i)
+            private void ValidateHoles()
             {
-                var (a0Id, a1Id) = (constraints[2 * i], constraints[2 * i + 1]);
-                var count = positions.Length;
-                if (a0Id >= count || a0Id < 0 || a1Id >= count || a1Id < 0)
+                if (!holes.IsCreated)
                 {
-                    return Status.ConstraintOutOfBounds(i, new int2(a0Id, a1Id), count);
+                    return;
                 }
 
-                return Status.Ok;
-            }
-
-            private Status EdgeValidation(int i)
-            {
-                var (a0Id, a1Id) = (constraints[2 * i], constraints[2 * i + 1]);
-                if (a0Id == a1Id)
+                if (!constraints.IsCreated)
                 {
-                    return Status.ConstraintSelfLoop(i, new int2(a0Id, a1Id));
-                }
-                return Status.Ok;
-            }
-
-            private Status EdgeEdgeValidation(int i)
-            {
-                for (int j = i + 1; j < constraints.Length / 2; j++)
-                {
-                    var err = ValidatePair(i, j);
-                    if (err.IsError) return err;
+                    status.Value = Status.RedudantHolesArray;
                 }
 
-                return Status.Ok;
-            }
-
-            private Status ValidatePair(int i, int j)
-            {
-                var (a0Id, a1Id) = (constraints[2 * i], constraints[2 * i + 1]);
-                var (b0Id, b1Id) = (constraints[2 * j], constraints[2 * j + 1]);
-
-                // Repeated indicies
-                if (a0Id == b0Id && a1Id == b1Id ||
-                    a0Id == b1Id && a1Id == b0Id)
+                for (int i = 0; i < holes.Length; i++)
                 {
-                    return Status.DuplicateConstraint(i, j);
+                    if (math.any(!utils.isfinite(holes[i])))
+                    {
+                        status.Value = Status.HoleMustBeFinite(i);
+                        return;
+                    }
                 }
-
-                // One common vertex
-                if (a0Id == b0Id || a0Id == b1Id || a1Id == b0Id || a1Id == b1Id)
-                {
-                    return Status.Ok;
-                }
-
-                var (a0, a1, b0, b1) = (positions[a0Id], positions[a1Id], positions[b0Id], positions[b1Id]);
-                // Check if the two constraints intersect, but ignore if they only overlap at endpoints
-                if (EdgeEdgeIntersection(a0, a1, b0, b1) && !(PointLineSegmentIntersection(a0, b0, b1) || PointLineSegmentIntersection(a1, b0, b1) || PointLineSegmentIntersection(b0, a0, a1) || PointLineSegmentIntersection(b1, a0, a1)))
-                {
-                    return Status.ConstraintIntersection(i, j);
-                }
-
-                return Status.Ok;
             }
         }
 
@@ -968,12 +1390,12 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     return;
                 }
 
-                var dists = new NativeArray<TBig>(n, allocator);
                 using var _hullPrev = hullPrev = new(n, allocator);
                 using var _hullNext = hullNext = new(n, allocator);
                 using var _hullTri = hullTri = new(n, allocator);
                 using var _hullHash = hullHash = new(hashSize, allocator);
-                using var _EDGE_STACK = EDGE_STACK = new(math.min(maxTriangles, 512), allocator);
+                using var _EDGE_STACK = EDGE_STACK = new(math.min(3 * maxTriangles, 512), allocator);
+                var dists = new NativeArray<TBig>(n, allocator);
 
                 // Vertex closest to p1 and p2, as measured by the circumscribed circle radius of p1, p2, p3
                 // Thus (p1,p2,p3) form a triangle close to the center of the point set, and it's guaranteed that there
@@ -1373,44 +1795,17 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                         continue;
                     }
 
-                    // Swap edge
+                    // Swap edge (see figure above)
                     triangles[h0] = _q;
                     triangles[h3] = _p;
                     pointToHalfedge[_q] = h0;
                     pointToHalfedge[_p] = h3;
                     pointToHalfedge[_i] = h4;
                     pointToHalfedge[_j] = h1;
-
-                    var h5p = halfedges[h5];
-                    halfedges[h0] = h5p;
-                    if (h5p != -1)
-                    {
-                        halfedges[h5p] = h0;
-                    }
-
-                    var h2p = halfedges[h2];
-                    halfedges[h3] = h2p;
-                    if (h2p != -1)
-                    {
-                        halfedges[h2p] = h3;
-                    }
-
+                    ReplaceHalfedge(h5, h0);
+                    ReplaceHalfedge(h2, h3);
                     halfedges[h2] = h5;
                     halfedges[h5] = h2;
-
-                    constrainedHalfedges[h3] = constrainedHalfedges[h2];
-                    var h3p = halfedges[h3];
-                    if (h3p != -1)
-                    {
-                        constrainedHalfedges[h3p] = constrainedHalfedges[h2];
-                    }
-
-                    constrainedHalfedges[h0] = constrainedHalfedges[h5];
-                    var h0p = halfedges[h0];
-                    if (h0p != -1)
-                    {
-                        constrainedHalfedges[h0p] = constrainedHalfedges[h5];
-                    }
                     constrainedHalfedges[h2] = HalfedgeState.Unconstrained;
                     constrainedHalfedges[h5] = HalfedgeState.Unconstrained;
 
@@ -1439,6 +1834,22 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 }
 
                 intersections.Clear();
+            }
+
+            /// <summary>
+            /// Replaces <paramref name="h0"/> with <paramref name="h1"/>.
+            /// </summary>
+            private void ReplaceHalfedge(int h0, int h1)
+            {
+                var h0p = halfedges[h0];
+                halfedges[h1] = h0p;
+                constrainedHalfedges[h1] = constrainedHalfedges[h0];
+
+                if (h0p != -1)
+                {
+                    halfedges[h0p] = h1;
+                    constrainedHalfedges[h0p] = constrainedHalfedges[h0];
+                }
             }
 
             private bool EdgeEdgeIntersection(int2 e1, int2 e2)
@@ -1670,7 +2081,6 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             private NativeList<T2> positions;
             private NativeList<HalfedgeState> constrainedHalfedges;
             private NativeList<int> halfedges;
-
             private NativeArray<bool> shouldRemoveTriangle;
             private NativeQueue<int> trianglesQueue;
             private NativeArray<T2> holes;
@@ -1678,9 +2088,9 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             private readonly Args args;
 
-            public PlantingSeedStep(InputData<T2> input, OutputData<T2> output, Args args) : this(input, output, args, input.HoleSeeds) { }
+            public PlantingSeedStep(InputData<T2> input, OutputData<T2> output, Args args) : this(output, args, input.HoleSeeds) { }
 
-            public PlantingSeedStep(InputData<T2> input, OutputData<T2> output, Args args, NativeArray<T2> localHoles)
+            public PlantingSeedStep(OutputData<T2> output, Args args, NativeArray<T2> localHoles)
             {
                 status = output.Status;
                 triangles = output.Triangles;
@@ -1714,7 +2124,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     trianglesQueue.Dispose();
                 }
 
-                if (anyRemovedTriangles) Finish(allocator);
+                RemoveVisitedTriangles(allocator);
             }
 
             private void PlantBoundarySeeds()
@@ -1742,43 +2152,56 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 }
             }
 
-            private void Finish(Allocator allocator)
+
+            private void RemoveVisitedTriangles(Allocator allocator)
             {
-                int triangleCount = 0;
-                // Calculate a mapping of old triangle indices to new triangle indices, after some triangles have been removed
-                var triangleIndexRemap = new NativeArray<int>(this.triangles.Length / 3, allocator);
-                for (int tId = 0; tId < shouldRemoveTriangle.Length; tId++)
+                if (!anyRemovedTriangles)
                 {
-                    triangleIndexRemap[tId] = shouldRemoveTriangle[tId] ? -1 : triangleCount++;
+                    return;
                 }
 
-                int RemapHalfEdge (int he) {
-                    if (he == -1) return -1;
-                    var newIndex = triangleIndexRemap[he / 3];
-                    return newIndex == -1 ? -1 : newIndex * 3 + (he % 3);
+                // Indices to remove are marked with -1, otherwise they are assigned with incremental id.
+                var indexRemap = new NativeArray<int>(triangles.Length / 3, allocator);
+                var count = 0;
+                for (int tId = 0; tId < shouldRemoveTriangle.Length; tId++)
+                {
+                    indexRemap[tId] = shouldRemoveTriangle[tId] ? -1 : count++;
+                }
+
+                int RemapHalfedge(int he)
+                {
+                    if (he == -1)
+                    {
+                        return -1;
+                    }
+                    var newIndex = indexRemap[he / 3];
+                    return newIndex == -1 ? -1 : 3 * newIndex + he % 3;
                 }
 
                 // Reinterpret to a larger struct to make copies of whole triangles slightly more efficient
-                var constrainedHalfedges = this.constrainedHalfedges.AsArray().Reinterpret<bool3>(1);
-                var triangles = this.triangles.AsArray().Reinterpret<int3>(4);
+                var constrainedHalfedges3 = constrainedHalfedges.AsArray().Reinterpret<bool3>(1);
+                var triangles3 = triangles.AsArray().Reinterpret<int3>(4);
 
                 // Copy the triangles, constrained halfedges, and halfedges to new indices in-place.
-                for (int tId = 0; tId < triangleIndexRemap.Length; tId++) {
-                    var newIndex = triangleIndexRemap[tId];
-                    if (newIndex != -1) {
-                        triangles[newIndex] = triangles[tId];
-                        constrainedHalfedges[newIndex] = constrainedHalfedges[tId];
-                        halfedges[3*newIndex + 0] = RemapHalfEdge(halfedges[3 * tId + 0]);
-                        halfedges[3*newIndex + 1] = RemapHalfEdge(halfedges[3 * tId + 1]);
-                        halfedges[3*newIndex + 2] = RemapHalfEdge(halfedges[3 * tId + 2]);
+                for (int tId = 0; tId < indexRemap.Length; tId++)
+                {
+                    var tIdNew = indexRemap[tId];
+                    if (tIdNew != -1)
+                    {
+                        triangles3[tIdNew] = triangles3[tId];
+                        constrainedHalfedges3[tIdNew] = constrainedHalfedges3[tId];
+                        halfedges[3 * tIdNew + 0] = RemapHalfedge(halfedges[3 * tId + 0]);
+                        halfedges[3 * tIdNew + 1] = RemapHalfedge(halfedges[3 * tId + 1]);
+                        halfedges[3 * tIdNew + 2] = RemapHalfedge(halfedges[3 * tId + 2]);
                     }
                 }
 
-                this.triangles.Length = triangleCount * 3;
-                this.constrainedHalfedges.Length = triangleCount * 3;
-                halfedges.Length = triangleCount * 3;
+                // Trim the data to reflect removed triangles.
+                triangles.Length = 3 * count;
+                constrainedHalfedges.Length = 3 * count;
+                halfedges.Length = 3 * count;
 
-                triangleIndexRemap.Dispose();
+                indexRemap.Dispose();
             }
 
             private void PlantSeed(int tId)
@@ -2932,7 +3355,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             }
 
             var c = (min + max) / 2;
-            var s = (fp)2 / (max - min);
+            var s = (fp)2L / (max - min);
 
             return Scale(s) * Translate(-c) * partialTransform;
         }
@@ -3358,7 +3781,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             // NOTE: In a case when div = 0 (i.e. circumcenter is not well defined) we use fp.max_value to mimic the infinity.
             var div = d.x * e.y - d.y * e.x;
-            return div == 0 ? fp.max_value : a + (fp)0.5 / div * (bl * fpmath.fp2(e.y, -e.x) + cl * fpmath.fp2(-d.y, d.x));
+            return div == 0 ? fp.max_value : a + (fp)1L / 2L / div * (bl * fpmath.fp2(e.y, -e.x) + cl * fpmath.fp2(-d.y, d.x));
         }
         public readonly fp Const(float v) => (fp)v;
         public readonly fp EPSILON() => fp.FromRaw(1L);
@@ -3389,7 +3812,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                 var denInv = 1 / cross(v0, v1);
                 var v = denInv * cross(v2, v1);
                 var w = denInv * cross(v0, v2);
-                var u = (fp)1.0f - v - w;
+                var u = (fp)1L - v - w;
                 return new(u, v, w);
             }
             // NOTE: use barycentric property.
@@ -3404,7 +3827,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
         public readonly fp alpha(fp D, fp dSquare)
         {
             var d = fpmath.sqrt(dSquare);
-            var k = (int)fpmath.round(fpmath.log2((fp)0.5f * d / D));
+            var k = (int)fpmath.round(fpmath.log2(d / D / 2L));
             return D / d * (k < 0 ? fpmath.pow(2, k) : 1 << k);
         }
         public readonly bool anygreaterthan(fp a, fp b, fp c, fp v) => math.any(fpmath.fp3(a, b, c) > v);

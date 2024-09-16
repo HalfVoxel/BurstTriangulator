@@ -36,8 +36,10 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             new((autoHoles: false, constrainMesh: true,  refineMesh: false, useHoles: true, restoreBoundary: true, preprocessor: Preprocessor.None)),
 
             new((autoHoles: false, constrainMesh: false, refineMesh: true, useHoles: false, restoreBoundary: false, preprocessor: Preprocessor.None)),
-            new((autoHoles: false, constrainMesh: false, refineMesh: true, useHoles: true, restoreBoundary: true, preprocessor: Preprocessor.None)),
-            new((autoHoles: true, constrainMesh: false, refineMesh: true, useHoles: false, restoreBoundary: false, preprocessor: Preprocessor.None)),
+
+            // This will fail validation
+            // new((autoHoles: false, constrainMesh: false, refineMesh: true, useHoles: true, restoreBoundary: true, preprocessor: Preprocessor.None)),
+            // new((autoHoles: true, constrainMesh: false, refineMesh: true, useHoles: false, restoreBoundary: false, preprocessor: Preprocessor.None)),
 
             new((autoHoles: false, constrainMesh: false, refineMesh: false, useHoles: false, restoreBoundary: false, preprocessor: Preprocessor.PCA)),
             new((autoHoles: false, constrainMesh: false, refineMesh: false, useHoles: false, restoreBoundary: false, preprocessor: Preprocessor.COM)),
@@ -103,6 +105,17 @@ namespace andywiecko.BurstTriangulator.Editor.Tests
             new AsNativeArrayJob { a = a.AsNativeArray(out var handle) }.Run();
             Assert.That(a, Is.EqualTo(new[] { 2, 3, 4, 5, 6, 7 }));
             handle.Free();
+        }
+
+        [Test, Description("Checks for memory leaks during Triangulator allocation and disposal.")]
+        public void DisposeLeaksTest()
+        {
+            // Log and forgive any existing leaks before the test.
+            // Note: These leaks may not be related to Triangulator and could be caused by other internal systems (e.g., UIElements).
+            Unity.Collections.LowLevel.Unsafe.UnsafeUtility.CheckForLeaks();
+            new Triangulator(Allocator.Persistent).Dispose();
+            var leaks = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.CheckForLeaks();
+            Assert.That(leaks, Is.Zero);
         }
     }
 }

@@ -15,7 +15,7 @@ using var constraintEdges = new NativeArray<int>(..., Allocator.Persistent);
 using var positions = new NativeArray<double2>(..., Allocator.Persistent);
 using var triangulator = new Triangulator(Allocator.Persistent)
 {
-  Input = { 
+  Input = {
     Positions = positions,
     ConstraintEdges = constraintEdges,
   },
@@ -40,7 +40,7 @@ using var holes = new NativeArray<double2>(..., Allocator.Persistent);
 using var positions = new NativeArray<double2>(..., Allocator.Persistent);
 using var triangulator = new Triangulator(Allocator.Persistent)
 {
-  Input = { 
+  Input = {
     Positions = positions,
     ConstraintEdges = constraintEdges,
     HoleSeeds = holes,
@@ -64,7 +64,7 @@ using var positions = new NativeArray<double2>(..., Allocator.Persistent);
 using var constraintEdges = new NativeArray<int>(..., Allocator.Persistent);
 using var triangulator = new Triangulator(Allocator.Persistent)
 {
-  Input = { 
+  Input = {
     Positions = positions,
     ConstraintEdges = constraintEdges,
   },
@@ -76,11 +76,45 @@ triangulator.Run();
 var triangles = triangulator.Output.Triangles;
 ```
 
-> [!WARNING]  
+> [!WARNING]
 > The current implementation of [`AutoHolesAndBoundary`][auto-holes-property] detects only *1-level islands*.
 > It will not detect holes in *solid* meshes inside other holes.
+
+## Ignore constraints for planting seeds
+
+As described in the introduction, the algorithm for triangle removal (and automatic hole detection) is based on a "spreading virus" mechanism, where constrained edges block the propagation. This behavior can be overridden by setting [`ConstraintEdgeTypes`][constraint-edge-types] to `ConstraintType.Constrained` for a given constraint, instead of the default `ConstraintType.ConstrainedAndHoleBoundary`.
+
+```csharp
+using var positions = new NativeArray<double2>(..., Allocator.Persistent);
+using var constraintEdges = new NativeArray<int>(..., Allocator.Persistent);
+using var constraintTypes = new NativeArray<ConstraintType>(constraintEdges.Length/2, Allocator.Persistent);
+constraintTypes[0] = ConstraintType.Constraint;
+constraintTypes[1] = ConstraintType.ConstrainedAndHoleBoundary;
+using var triangulator = new Triangulator(Allocator.Persistent)
+{
+  Input = {
+    Positions = positions,
+    ConstraintEdges = constraintEdges,
+    ConstraintTypes = constraintTypes,
+  },
+  Settings = { AutoHolesAndBoundary = true, },
+};
+
+triangulator.Run();
+
+var triangles = triangulator.Output.Triangles;
+```
+
+This feature is especially useful when the user wants to include a constraint but does not wish to enable hole detection for that edge. Consider the following example input:
+
+<br>
+<p align="center"><img src="../../images/manual-ignore-constraint-for-planting-seeds.svg" width="500"/></p>
+<br>
+
+In this example, the red constraint is set to `ConstraintType.Constrained` in [`ConstraintEdgeTypes`][constraint-edge-types]. As a result, a hole is not generated from red constraint, and the edge remains part of the final triangulation.
 
 [restore-boundary-property]: xref:andywiecko.BurstTriangulator.TriangulationSettings.RestoreBoundary
 [input-constraint-edges]: xref:andywiecko.BurstTriangulator.InputData`1.ConstraintEdges
 [input-positions]: xref:andywiecko.BurstTriangulator.InputData`1.Positions
 [auto-holes-property]: xref:andywiecko.BurstTriangulator.TriangulationSettings.AutoHolesAndBoundary
+[constraint-edge-types]: xref:andywiecko.BurstTriangulator.InputData`1.ConstraintEdgeTypes
