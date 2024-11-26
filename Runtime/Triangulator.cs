@@ -1083,7 +1083,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
 
             public ValidateInputStep(InputData<T2> input, OutputData<T2> output, Args args)
             {
-                positions = output.Positions.AsReadOnly();
+                positions = output.Positions.AsArray().AsReadOnly();
                 status = output.Status;
                 this.args = args;
                 constraints = input.ConstraintEdges.AsReadOnly();
@@ -1294,7 +1294,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             {
                 status = output.Status;
                 // Note: At this point these are the input positions (possibly transformed by a preprocessor)
-                positions = output.Positions.AsReadOnly();
+                positions = output.Positions.AsArray().AsReadOnly();
                 triangles = output.Triangles;
                 halfedges = output.Halfedges;
                 constrainedHalfedges = output.ConstrainedHalfedges;
@@ -1685,7 +1685,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
             public ConstrainEdgesStep(InputData<T2> input, OutputData<T2> output, Args args)
             {
                 status = output.Status;
-                positions = output.Positions.AsReadOnly();
+                positions = output.Positions.AsArray().AsReadOnly();
                 triangles = output.Triangles.AsArray();
                 inputConstraintEdges = input.ConstraintEdges.AsReadOnly();
                 inputConstraintEdgeTypes = input.ConstraintEdgeTypes.AsReadOnly();
@@ -2604,7 +2604,7 @@ namespace andywiecko.BurstTriangulator.LowLevel.Unsafe
                     var area2 = Area2(xi, xj, xk);
                     if (utils.greater(area2, maximumArea2)) // TODO split permited
                     {
-                        foreach (var he in edges.AsReadOnly())
+                        foreach (var he in edges.AsArray().AsReadOnly())
                         {
                             heQueue.Add(he);
                         }
